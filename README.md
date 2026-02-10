@@ -1,2 +1,6 @@
 # fdi-pln-26G6
-Repositorio para la asignatura Procesamiento de Lenguaje Natural
+Repositorio para las prácticas de la asignatura Procesamiento del Lenguaje Natural.
+
+## Integrantes
+- Carmen Fernández González
+- Yushan Yang Xu
