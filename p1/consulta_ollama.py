@@ -6,6 +6,12 @@ import json
 
 from config import OLLAMA_MODEL
 
+def cargar_prompt(nombre_archivo, **kwargs):
+    """Carga un prompt."""
+    with open(f"prompts/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
+        plantilla = f.read()
+    return plantilla.format(**kwargs)
+
 def clean_json_response(response_text):
     """Limpia la respuesta del LLM para extraer solo el JSON válido."""
 
@@ -23,7 +29,7 @@ def clean_json_response(response_text):
 
 def ollama_generate(prompt: str, system_prompt: str = "") -> dict:
     """Consulta a Ollama y fuerza el retorno de un diccionario."""
-    
+
     print("🤖 Pensando...")
     try:
         response = ollama.chat(
