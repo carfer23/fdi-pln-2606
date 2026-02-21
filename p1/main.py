@@ -11,7 +11,7 @@ from config import AGENT_NAME
 def main():
     print("Iniciando agente IA...")
 
-    # ----- ANÁLISIS INICIAL -----
+    # ----- CONFIGURACIÓN INICIAL -------------------------------
     usuarios = get_gente()
 
     if AGENT_NAME not in usuarios:
@@ -24,15 +24,15 @@ def main():
     
     faltantes, sobrantes = calcular_estado(info)
     print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
-    # ----------------------------
     
     prompt_inicial = cargar_prompt("prompt_inicial", 
                                    alias=AGENT_NAME, 
                                    faltantes=faltantes, 
                                    sobrantes=sobrantes,
                                    usuarios=usuarios)
+    # -----------------------------------------------------------
 
-    # 2. FASE DE DIFUSIÓN (Enviar cartas a todos)
+    # ----- FASE DE DIFUSIÓN DE CARTAS --------------------------
     print("\n--- 📨 FASE 1: Enviando propuestas a todos ---")
 
     # Convertimos los dicts a listas para poder usar índices
@@ -41,6 +41,8 @@ def main():
 
     for i, usuario in enumerate(usuarios):
         if usuario == AGENT_NAME: continue
+
+        print(f"Enviando carta a {usuario}...")
 
         # 1. Alternamos el recurso necesitado usando el índice del bucle
         item_need = lista_faltantes[i % len(lista_faltantes)]
@@ -62,16 +64,16 @@ def main():
             cant_a_ofrecer = 0
         
         prompt = cargar_prompt("prompt_difusion", 
-                                   usuario=usuario,
-                                   cant_a_pedir=cant_a_pedir, 
-                                   item_need=item_need, 
-                                   cant_a_ofrecer=cant_a_ofrecer,
-                                   item_offer=item_offer)
+                                usuario=usuario,
+                                cant_a_pedir=cant_a_pedir, 
+                                item_need=item_need, 
+                                cant_a_ofrecer=cant_a_ofrecer,
+                                item_offer=item_offer)
         
-        # Usamos el sys_prompt para que la respuesta sea JSON puro
-        respuesta = ollama_generate(prompt, prompt_inicial) 
+        respuesta = ollama_generate(prompt, prompt_inicial)
         ejecutar_accion(respuesta)
         time.sleep(1)
+    # -----------------------------------------------------------
 
     # 3. FASE REACTIVA (Bucle infinito)
     print("\n--- 👁️ FASE 2: Esperando respuestas y paquetes ---")

@@ -1,0 +1,1 @@
+Hola {dest}, soy {alias}. Necesito {req_cant} de {req}. A cambio te ofrezco {ofr_cant} de {ofr}. Si te interesa, envíame el paquete.

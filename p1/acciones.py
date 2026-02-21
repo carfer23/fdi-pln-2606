@@ -31,33 +31,10 @@ def enviar_carta(dest, asunto, cuerpo):
     r = requests.post(url, json=data)
 
     if r.status_code == 200:
-        print(f"Carta enviada correctamente a {dest}")
+        print(f"📨 Carta enviada correctamente a {dest}")
         print(cuerpo)
     else:
-        print(f"Error al enviar carta a {dest}. Status: {r.status_code}, Respuesta: {r.text}")
-
-def generar_carta(destinatario: str, recurso_necesitado: str, recurso_ofrecido: str, cantidad_recurso_necesitado, cantidad_recurso_ofrecido):
-    """Genera la carta que el agente enviará a otro usuario solicitando intercambio de recursos."""
-
-    asunto = f"Intercambio de recursos con {destinatario}"
-    cuerpo = f"""
-    Estimado usuario {destinatario},
-
-    Soy el agente {AGENT_NAME} y me encuentro en busca de los siguientes recursos:
-
-    - Recurso solicitado: {recurso_necesitado} - Cantidad: {cantidad_recurso_necesitado}
-    - Recurso ofrecido: {recurso_ofrecido} - Cantidad: {cantidad_recurso_ofrecido}
-
-    Ofrezco los recursos mencionados a cambio del recurso solicitado para poder acercarme a mi objetivo.
-
-    Espero una respuesta favorable.
-
-    Atentamente,
-    {AGENT_NAME}
-    """
-    
-    # Llamada a la función que envía la carta
-    enviar_carta(destinatario, asunto, cuerpo)
+        print(f"❌ Error al enviar carta a {dest}. Status: {r.status_code}, Respuesta: {r.text}")
 
 def borrar_carta(id_carta: str):
     """Elimina una carta del buzón por su ID."""
@@ -83,6 +60,12 @@ def enviar_paquete(destinatario, objeto, cantidad):
     else:
         print(f"❌ Error enviando paquete: {r.text}")
 
+def cargar_carta(nombre_archivo, **kwargs):
+    """Carga una carta."""
+    with open(f"cartas/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
+        plantilla = f.read()
+    return plantilla.format(**kwargs)
+
 def ejecutar_accion(accion_json):
     """Ejecuta la acción elegida por el agente."""
 
@@ -98,10 +81,13 @@ def ejecutar_accion(accion_json):
         ofr = accion_json.get("recurso_ofrecido", "nada")
         ofr_cant = accion_json.get("cantidad_recurso_ofrecido", 0)
         
-        cuerpo = (f"Hola {dest}, soy {AGENT_NAME}. "
-                  f"Necesito {req_cant} de {req}. "
-                  f"A cambio te ofrezco {ofr_cant} de {ofr}. "
-                  f"Si te interesa, envíame el paquete.")
+        cuerpo = cargar_carta("carta_difusion",
+                              dest=dest,
+                              alias=AGENT_NAME,
+                              req_cant=req_cant,
+                              req=req,
+                              ofr_cant=ofr_cant,
+                              ofr=ofr)
         
         enviar_carta(dest, "Propuesta de intercambio", cuerpo)
 
