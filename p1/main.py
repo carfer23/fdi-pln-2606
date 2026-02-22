@@ -30,14 +30,18 @@ def main():
                                    faltantes=faltantes, 
                                    sobrantes=sobrantes,
                                    usuarios=usuarios)
-    # -----------------------------------------------------------
+    
+    print(f"PROMPT: {prompt_inicial}")
 
     # ----- FASE DE DIFUSIÓN DE CARTAS --------------------------
-    print("\n--- 📨 FASE 1: Enviando propuestas a todos ---")
+    print("\n--- 📨 FASE 1: Enviando cartas a todos ---")
 
     # Convertimos los dicts a listas para poder usar índices
     lista_faltantes = list(faltantes.keys())
     lista_sobrantes = list(sobrantes.keys())
+
+    if len(usuarios) == 1:
+        print("No hay otros usuarios activos.")
 
     for i, usuario in enumerate(usuarios):
         if usuario == AGENT_NAME: continue
@@ -70,62 +74,70 @@ def main():
                                 cant_a_ofrecer=cant_a_ofrecer,
                                 item_offer=item_offer)
         
+        print(f"PROMPT: {prompt}")
+        
         respuesta = ollama_generate(prompt, prompt_inicial)
         ejecutar_accion(respuesta)
         time.sleep(1)
-    # -----------------------------------------------------------
 
-    # 3. FASE REACTIVA (Bucle infinito)
+    # ----- FASE REACTIVA ---------------------------------------
     print("\n--- 👁️ FASE 2: Esperando respuestas y paquetes ---")
 
+    # Número de cartas pedientes de procesar
+    num_cartas_pendientes = 0
+
+    # Bucle infinito
     while True:
 
-        info = get_info()
-        buzon_dict = info.get("Buzon", [])
-
-        # Convertimos el dict de dicts en una lista simple de cuerpos de mensaje
-        mensajes_pendientes = []
-        for carta_id, datos in buzon_dict.items():
-            mensajes_pendientes.append({
-                "de": datos["remi"],
-                "asunto": datos["asunto"],
-                "contenido": datos["cuerpo"]
-            })
-
-        # Chequear si ya ganamos (opcional)
-        faltantes, _ = calcular_estado(info)
+        # Chequear si se ha cumplido el objetivo
+        faltantes, sobrantes = calcular_estado(info)
         if not faltantes:
             print("🏆 ¡OBJETIVO CUMPLIDO!")
             break
+        
+        # Leer buzón
+        info = get_info()
+        buzon_dict = info.get("Buzon", [])
 
-        # Si hay cartas, las procesamos
-        if mensajes_pendientes:
-            print(f"Tienes {len(mensajes_pendientes)} cartas nuevas.")
-            # Leemos la última carta (simplificación)
-            ultima_carta = mensajes_pendientes[-1] 
-            print(ultima_carta)
+        mensajes_nuevos = []
+        if len(buzon_dict) == 0:
+            print("Buzón vacío.")
+        else:
+            for carta_id, datos in buzon_dict.items():
+                mensajes_nuevos.append({
+                    "de": datos["remi"],
+                    "asunto": datos["asunto"],
+                    "contenido": datos["cuerpo"]
+                })
 
-            prompt = f"""
-            CARTA RECIBIDA de {ultima_carta['de']}:
-            "{ultima_carta['contenido']}"
+        # Si hay cartas nuevas o cartas pendientes -> las procesamos
+        if mensajes_nuevos or num_cartas_pendientes > 0:
+            # Número actual de cartas en el buzón
+            num_cartas = len(mensajes_nuevos)
+            print(f"Tienes {num_cartas-num_cartas_pendientes} cartas nuevas. TOTAL: {num_cartas} cartas en el buzón.")
+            # Número actual de cartas pendientes de procesar
+            num_cartas_pendientes = num_cartas
 
-            MIS RECURSOS: {info['Recursos']}
-            MIS OBJETIVOS: {info['Objetivo']}
+            # Leemos la primera carta (la más antigua)
+            primera_carta = mensajes_nuevos[0] 
 
-            INSTRUCCIÓN:
-            Analiza si lo que ofrece {ultima_carta['de']} nos sirve para completar el objetivo.
-            Por ejemplo, 'burrito sabanero' ofrece PIEDRA, y nosotros necesitamos 4 de PIEDRA.
-            Si decides aceptar, responde con la acción 'enviar_paquete'.
-            Si no aceptas, responde con la acción 'esperar'.
-            """
+            print(primera_carta)
+
+            prompt = cargar_prompt("prompt_procesar_carta",
+                                   usuario=primera_carta['de'],
+                                   contenido=primera_carta['contenido'],
+                                   faltantes=faltantes,
+                                   sobrantes=sobrantes)
             
-            # Limpiamos el buzón (en una implementación real habría que borrar las cartas leídas o marcar como leídas)
-            # Como la API proporcionada no tiene método de borrar explícito, asumimos que procesamos lo último.
+            print(f"PROMPT: {prompt}")
             
             respuesta = ollama_generate(prompt, prompt_inicial)
             ejecutar_accion(respuesta)
 
+            # Eliminar carta procesada del buzón
             borrar_carta(carta_id)
+            # Una carta pendiente menos
+            num_cartas_pendientes -= 1
             
         else:
             print("💤 Nada nuevo en el buzón. Esperando...")

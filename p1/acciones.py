@@ -1,11 +1,8 @@
 """Módulo con métodos para realizar acciones."""
 
 import requests
-import os
 
-from config import AGENT_NAME
-
-URL_BASE = os.getenv("FDI_PLN__BUTLER_ADDRESS")
+from config import AGENT_NAME, URL_BASE
 
 def register_agent(name: str):
     """Registra un alias."""

@@ -2,9 +2,8 @@
 
 import requests
 import json
-import os
 
-URL_BASE = os.getenv("FDI_PLN__BUTLER_ADDRESS")
+from config import URL_BASE
 
 def get_gente():
     """Mira los alias registrados."""

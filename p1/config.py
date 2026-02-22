@@ -5,8 +5,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AGENT_NAME = "trilobite"
+# URL de Butler
 URL_BASE = os.getenv("FDI_PLN__BUTLER_ADDRESS")
-#URL_BASE = "http://147.96.81.252:7719"
-OLLAMA_MODEL = "qwen3-vl:4b"
-OLLAMA_BIN = "/home/hlocal/Documents/ollama/bin/ollama"
+
+# Nombre del agente
+AGENT_NAME = os.getenv("AGENT_NAME")
+
+# Modelo de Ollama
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")

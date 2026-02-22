@@ -41,8 +41,8 @@ def ollama_generate(prompt: str, system_prompt: str = "") -> dict:
             options={'temperature': 0.1} # Temperatura baja para ser más preciso con JSON
         )
         content = response['message']['content']
-        print(content)
         cleaned_json = clean_json_response(content)
+        
         print(cleaned_json)
 
         return json.loads(cleaned_json)
