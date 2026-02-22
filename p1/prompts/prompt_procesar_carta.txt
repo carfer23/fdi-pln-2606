@@ -6,6 +6,6 @@ MIS RECURSOS SOBRANTES: {sobrantes}
 
 INSTRUCCIÓN:
 Analiza si lo que ofrece {usuario} sirve para completar el objetivo.
-Por ejemplo, 'burrito sabanero' ofrece PIEDRA, y nosotros necesitamos 4 de PIEDRA.
+Por ejemplo, si 'burrito sabanero' ofrece 1 piedra a cambio de 1 queso, y necesitas piedra y te sobra queso, aceptas.
 Si decides aceptar, responde con la acción 'enviar_paquete'.
 Si no aceptas, responde con la acción 'esperar'.

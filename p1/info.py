@@ -3,7 +3,7 @@
 import requests
 import json
 
-from config import URL_BASE,AGENT_NAME
+from config import URL_BASE, AGENT_NAME
 
 def get_gente():
     """Mira los alias registrados."""
@@ -35,30 +35,36 @@ def get_info():
     except Exception as e:
         print(f"Error conectando: {e}")
     return None
+
+def calcular_estado():
+    """Calcula qué sobra y qué falta."""
+    info = get_info()
     
-def get_recursos():
-    """Obtiene los recursos actuales."""
-    url = f"{URL_BASE}/info"
-    r = requests.get(url)
+    recursos = info.get("Recursos", {})
+    objetivo = info.get("Objetivo", {})
+    
+    faltantes = {}
+    sobrantes = {}
+    
+    # Calcular faltantes (lo que necesito - lo que tengo)
+    for k, v in objetivo.items():
+        actual = recursos.get(k, 0)
+        diff = v - actual
+        if diff > 0:
+            faltantes[k] = diff
 
-    if r.status_code == 200:
-        r = json.loads(r.text)
-        return r["Recursos"]
-
-def get_objetivo():
-    """Obtiene los recursos objetivo."""
-    url = f"{URL_BASE}/info"
-    r = requests.get(url)
-
-    if r.status_code == 200:
-        r = json.loads(r.text)
-        return r["Objetivo"]
+    # Calcular sobrantes (lo que tengo - lo que necesito)
+    # - Si no está en objetivo, todo es sobrante
+    # - Si está en objetivo y tengo más, el resto es sobrante
+    for k, v in recursos.items():
+        necesario = objetivo.get(k, 0)
+        diff = v - necesario
+        if diff > 0:
+            sobrantes[k] = diff
+            
+    return faltantes, sobrantes
 
 def get_buzon():
     """Obtiene el contenido del buzón."""
-    url = f"{URL_BASE}/info"
-    r = requests.get(url)
-
-    if r.status_code == 200:
-        r = json.loads(r.text)
-        return r["Buzon"]
+    info = get_info()
+    return info.get("Buzon", [])
