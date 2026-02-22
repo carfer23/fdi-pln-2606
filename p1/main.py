@@ -2,8 +2,8 @@
 
 import time
 
-from info import get_info, get_gente
-from acciones import register_agent, calcular_estado, ejecutar_accion, borrar_carta
+from info import get_gente, calcular_estado, get_buzon
+from acciones import register_agent, ejecutar_accion, borrar_carta
 from consulta_ollama import ollama_generate, cargar_prompt
 
 from config import AGENT_NAME
@@ -18,11 +18,8 @@ def main():
         register_agent(AGENT_NAME)
     else:
         print("Alias ya registrado.")
-
-    info = get_info()
-    if not info: return
     
-    faltantes, sobrantes = calcular_estado(info)
+    faltantes, sobrantes = calcular_estado()
     print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
     
     prompt_inicial = cargar_prompt("prompt_inicial", 
@@ -30,8 +27,6 @@ def main():
                                    faltantes=faltantes, 
                                    sobrantes=sobrantes,
                                    usuarios=usuarios)
-    
-    print(f"PROMPT: {prompt_inicial}")
 
     # ----- FASE DE DIFUSIÓN DE CARTAS --------------------------
     print("\n--- 📨 FASE 1: Enviando cartas a todos ---")
@@ -40,7 +35,7 @@ def main():
     lista_faltantes = list(faltantes.keys())
     lista_sobrantes = list(sobrantes.keys())
 
-    if len(usuarios) == 1:
+    if len(usuarios) == 0:
         print("No hay otros usuarios activos.")
 
     for i, usuario in enumerate(usuarios):
@@ -91,14 +86,13 @@ def main():
     while True:
 
         # Chequear si se ha cumplido el objetivo
-        faltantes, sobrantes = calcular_estado(info)
+        faltantes, sobrantes = calcular_estado()
         if not faltantes:
             print("🏆 ¡OBJETIVO CUMPLIDO!")
             break
         
         # Leer buzón
-        info = get_info()
-        buzon_dict = info.get("Buzon", [])
+        buzon_dict = get_buzon()
 
         mensajes_nuevos = []
         if len(buzon_dict) == 0:
@@ -130,7 +124,7 @@ def main():
                                    faltantes=faltantes,
                                    sobrantes=sobrantes)
             
-            print(f"PROMPT: {prompt}")
+            #print(f"PROMPT: {prompt}")
             
             respuesta = ollama_generate(prompt, prompt_inicial)
             ejecutar_accion(respuesta)

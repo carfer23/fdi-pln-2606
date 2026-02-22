@@ -8,7 +8,7 @@ def register_agent(name: str):
     """Registra un alias."""
 
     url = f"{URL_BASE}/alias/{name}"
-    r = requests.post(url)
+    r = requests.post(url, params={"agente": AGENT_NAME})
 
     if r.status_code == 200:
         print(f"Alias '{name}' registrado correctamente")
@@ -25,11 +25,10 @@ def enviar_carta(dest, asunto, cuerpo):
         "asunto": asunto,
         "cuerpo": cuerpo
         }
-    r = requests.post(url, json=data)
+    r = requests.post(url, json=data, params={"agente": AGENT_NAME})
 
     if r.status_code == 200:
         print(f"📨 Carta enviada correctamente a {dest}")
-        print(cuerpo)
     else:
         print(f"❌ Error al enviar carta a {dest}. Status: {r.status_code}, Respuesta: {r.text}")
 
@@ -111,30 +110,3 @@ def ejecutar_accion(accion_json):
             enviar_paquete(destinatario, recurso_a_enviar, cantidad_a_enviar)
     elif tipo == "esperar":
         print("⏳ El agente decide esperar...")
-
-def calcular_estado(info):
-    """Calcula qué sobra y qué falta."""
-    
-    recursos = info.get("Recursos", {})
-    objetivo = info.get("Objetivo", {})
-    
-    faltantes = {}
-    sobrantes = {}
-    
-    # Calcular faltantes (lo que necesito - lo que tengo)
-    for k, v in objetivo.items():
-        actual = recursos.get(k, 0)
-        diff = v - actual
-        if diff > 0:
-            faltantes[k] = diff
-
-    # Calcular sobrantes (lo que tengo - lo que necesito)
-    # - Si no está en objetivo, todo es sobrante
-    # - Si está en objetivo y tengo más, el resto es sobrante
-    for k, v in recursos.items():
-        necesario = objetivo.get(k, 0)
-        diff = v - necesario
-        if diff > 0:
-            sobrantes[k] = diff
-            
-    return faltantes, sobrantes

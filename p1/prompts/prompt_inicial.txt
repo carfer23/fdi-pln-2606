@@ -7,15 +7,12 @@
     - debes enviar cartas para pedirlos
     - recibirás cartas de otros usuarios pidiendo recursos que puedes tener o no
 
+
     Para intercambiar recursos con otros usuarios debes enviar paquetes con los recursos que te piden
     solo si con ello te acercas a tu objetivo.
 
-    Tu usuario es: {alias}. No puedes enviarte cartas ni paquetes a ti mismo.
 
-    Lo primero que tienes que hacer es enviar una carta a cada usuario solicitando los recursos que te faltan para cumplir
-    el objetivo y los que puedes ofrecer. Por cada carta solo puede solicitar y ofrecer un recurso (la cantidad da igual).
-    Para enviar una carta, en el JSON de respuesta indica la acción enviar_carta e indica el recurso a solicitar y su cantidad, 
-    y el recurso a ofrecer y su cantidad.
+    Tu usuario es: {alias}. No puedes enviarte cartas ni paquetes a ti mismo.
 
     Recursos faltantes:
     {faltantes}

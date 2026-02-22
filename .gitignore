@@ -1,15 +1,10 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
 # Virtual environments
 venv/
 .env/
 
-# Logs
-*.log
-
-# IDE/editor files (opcional)
+# IDE/editor
 .vscode/
 .idea/
+
+__pycache__/
+estado_butler.json
