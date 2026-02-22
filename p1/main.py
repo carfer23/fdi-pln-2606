@@ -9,7 +9,7 @@ from consulta_ollama import ollama_generate, cargar_prompt
 from config import AGENT_NAME
 
 def main():
-    print(f"Iniciando agente IA... ¡Soy {AGENT_NAME}!")
+    print("Iniciando agente IA...")
 
     # ----- CONFIGURACIÓN INICIAL -------------------------------
     usuarios = get_gente()
@@ -77,6 +77,7 @@ def main():
         print(f"PROMPT: {prompt}")
         
         respuesta = ollama_generate(prompt, prompt_inicial)
+        print(respuesta)
         ejecutar_accion(respuesta)
         time.sleep(1)
 

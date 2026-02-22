@@ -7,5 +7,6 @@ MIS RECURSOS SOBRANTES: {sobrantes}
 INSTRUCCIÓN:
 Analiza si lo que ofrece {usuario} sirve para completar el objetivo.
 Por ejemplo, 'burrito sabanero' ofrece PIEDRA, y nosotros necesitamos 4 de PIEDRA.
+Si el recurso que el remitente ofrece está en Mis FALTANTES y el recurso que pide está en Mis SOBRANTES, debes aceptar.
 Si decides aceptar, responde con la acción 'enviar_paquete'.
 Si no aceptas, responde con la acción 'esperar'.

@@ -38,6 +38,7 @@ def ollama_generate(prompt: str, system_prompt: str = "") -> dict:
                 {'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': prompt}
             ],
+            format='json',
             options={'temperature': 0.1} # Temperatura baja para ser más preciso con JSON
         )
         content = response['message']['content']
