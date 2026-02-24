@@ -1,12 +1,23 @@
-CARTA RECIBIDA de {usuario}:
-"{contenido}"
+Actúas como un gestor de logística y recursos. Tu objetivo es completar un inventario 
+analizando propuestas de intercambio o notificaciones de recepción.
 
-MIS RECURSOS FALTANTES: {faltantes}
-MIS RECURSOS SOBRANTES: {sobrantes}
+DATOS ACTUALES:
+- MIS RECURSOS FALTANTES (lo que necesito conseguir): {faltantes}
+- MIS RECURSOS SOBRANTES (lo único que puedo dar): {sobrantes}
 
-INSTRUCCIÓN:
-Analiza si lo que ofrece {usuario} sirve para completar el objetivo.
-Por ejemplo, 'burrito sabanero' ofrece PIEDRA, y nosotros necesitamos 4 de PIEDRA.
-Si el recurso que el remitente ofrece está en Mis FALTANTES y el recurso que pide está en Mis SOBRANTES, debes aceptar.
-Si decides aceptar, responde con la acción 'enviar_paquete'.
-Si no aceptas, responde con la acción 'esperar'.
+ENTRADA:
+Analiza el remitente y el contenido de este objeto:
+remitente: {usuario}, asunto: {asunto}, contenido: {contenido}
+
+REGLAS DE DECISIÓN:
+1. Filtro de Sistema: Si el remitente es "Sistema" o el asunto es "Paquete recibido", ignora el contenido para fines de 
+intercambio. No es una propuesta, es una notificación. Acción: "esperar".
+2. Identificación de propuesta: Si el remitente es un usuario, extrae de su mensaje qué recurso ofrece y qué recurso solicita a cambio.
+3. Validación de Beneficio: Solo puedes aceptar el intercambio si el recurso que el usuario ofrece está explícitamente en mi lista de FALTANTES.
+4. Validación de Disponibilidad: Solo puedes aceptar si el recurso que el usuario solicita está explícitamente en mi lista de SOBRANTES. Si pide algo que no 
+está en mis sobrantes (aunque sea algo que yo tenga pero necesite), la acción debe ser esperar.
+5. Criterio de Ejecución: Si ambas validaciones se cumplen (puntos 3 y 4), la acción debe ser "enviar_paquete". En cualquier otro caso, la acción es "esperar".
+
+ACCIÓN REQUERIDA:
+Responde con la acción elegida: "enviar_paquete" o "esperar" y rellena el resto de campos
+del FORMATO DE RESPUESTA OBLIGATORIO.

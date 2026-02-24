@@ -47,6 +47,7 @@ def borrar_carta(id_carta: str):
 
 def enviar_paquete(destinatario, objeto, cantidad):
     """Envía un paquete al servidor."""
+
     print(f"Preparando envío a {destinatario} de {cantidad} {objeto}...")
     
     url = f"{URL_BASE}/paquete/{destinatario}"
@@ -66,6 +67,7 @@ def enviar_paquete(destinatario, objeto, cantidad):
 
 def cargar_carta(nombre_archivo, **kwargs):
     """Carga una carta."""
+
     with open(f"cartas/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
         plantilla = f.read()
     return plantilla.format(**kwargs)
@@ -78,7 +80,6 @@ def ejecutar_accion(accion_json):
     tipo = accion_json.get("accion")
     
     if tipo == "enviar_carta":
-        print("El agente enviar_carta")
         # Construcción del cuerpo de la carta
         dest = accion_json.get("destinatario")
         req = accion_json.get("recurso_solicitado", "nada")
@@ -100,13 +101,11 @@ def ejecutar_accion(accion_json):
         print("📦 El agente acepta el trato y prepara el envío...")
         
         destinatario = accion_json.get("destinatario")
-        print(destinatario)
         recurso_a_enviar = accion_json.get("recurso_solicitado") 
-        print(recurso_a_enviar)
         cantidad_a_enviar = accion_json.get("cantidad_recurso_solicitado")
-        print(cantidad_a_enviar)
 
         if recurso_a_enviar and cantidad_a_enviar:
             enviar_paquete(destinatario, recurso_a_enviar, cantidad_a_enviar)
+
     elif tipo == "esperar":
         print("⏳ El agente decide esperar...")

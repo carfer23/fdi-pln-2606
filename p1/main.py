@@ -48,7 +48,8 @@ def main():
         cant_total_necesitada = faltantes[item_need]
         
         # Pedimos solo una parte o el total si es poco (ej. pedir de 5 en 5)
-        cant_a_pedir = max(1, cant_total_necesitada // 2) 
+        #cant_a_pedir = max(1, cant_total_necesitada // 2) 
+        cant_a_pedir = 1
 
         # 2. Alternamos el recurso ofrecido (si tenemos)
         if lista_sobrantes:
@@ -90,6 +91,7 @@ def main():
         if not faltantes:
             print("🏆 ¡OBJETIVO CUMPLIDO!")
             break
+        print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
         
         # Leer buzón
         buzon_dict = get_buzon()
@@ -114,13 +116,14 @@ def main():
             num_cartas_pendientes = num_cartas
 
             # Leemos la primera carta (la más antigua)
-            primera_carta = mensajes_nuevos[0] 
+            primera_carta = mensajes_nuevos[-1] 
 
             print(primera_carta)
 
             prompt = cargar_prompt("prompt_procesar_carta",
                                    usuario=primera_carta['de'],
                                    contenido=primera_carta['contenido'],
+                                   asunto=primera_carta['asunto'],
                                    faltantes=faltantes,
                                    sobrantes=sobrantes)
             
