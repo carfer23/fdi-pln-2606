@@ -1,0 +1,7 @@
+Hola {dest},
+
+Te confirmo que he enviado un paquete con {env_cant} de {env_item}.
+Quedo a la espera de recibir {esp_cant} de {esp_item}.
+
+Un saludo,
+{alias}

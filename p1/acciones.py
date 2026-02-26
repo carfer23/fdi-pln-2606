@@ -11,9 +11,9 @@ def register_agent(name: str):
     r = requests.post(url, params={"agente": AGENT_NAME})
 
     if r.status_code == 200:
-        print(f"Alias '{name}' registrado correctamente")
+        print(f"Alias '{name}' registrado correctamente.")
     else:
-        print(f"Alias '{name}' ya estaba registrado")
+        print(f"Alias '{name}' ya estaba registrado.")
 
 def enviar_carta(dest, asunto, cuerpo):
     """Envía una carta."""
@@ -46,27 +46,23 @@ def borrar_carta(id_carta: str):
         print(f"❌ Error de conexión al borrar carta: {e}")
 
 def enviar_paquete(destinatario, objeto, cantidad):
-    """Envía un paquete al servidor."""
-
-    print(f"Preparando envío a {destinatario} de {cantidad} {objeto}...")
+    """Envía un paquete a otro usuario."""
     
     url = f"{URL_BASE}/paquete/{destinatario}"
-    data = {objeto: int(cantidad)}
-    
-    params = {"agente": AGENT_NAME} 
+    data = {objeto: int(cantidad)} 
     
     try:
-        r = requests.post(url, json=data, params=params)
+        r = requests.post(url, json=data, params={"agente": AGENT_NAME})
         
         if r.status_code == 200:
-            print(f"✅ ¡PAQUETE ENVIADO CON ÉXITO a {destinatario}: {cantidad} de {objeto}!")
+            print(f"📦 Paquete enviado a {destinatario}: {cantidad} de {objeto}")
         else:
-            print(f"❌ Error servidor: {r.text}")
+            print(f"❌ Error al enviar el paquete: {r.text}")
     except Exception as e:
         print(f"❌ Error de conexión: {e}")
 
 def cargar_carta(nombre_archivo, **kwargs):
-    """Carga una carta."""
+    """Carga una plantilla de carta."""
 
     with open(f"cartas/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
         plantilla = f.read()
@@ -80,6 +76,8 @@ def ejecutar_accion(accion_json):
     tipo = accion_json.get("accion")
     
     if tipo == "enviar_carta":
+        print("📨 El agente envía una carta...")
+
         # Construcción del cuerpo de la carta
         dest = accion_json.get("destinatario")
         req = accion_json.get("recurso_solicitado", "nada")
@@ -101,11 +99,24 @@ def ejecutar_accion(accion_json):
         print("📦 El agente acepta el trato y prepara el envío...")
         
         destinatario = accion_json.get("destinatario")
-        recurso_a_enviar = accion_json.get("recurso_solicitado") 
-        cantidad_a_enviar = accion_json.get("cantidad_recurso_solicitado")
+        recurso_enviar = accion_json.get("recurso_solicitado") 
+        cantidad_enviar = accion_json.get("cantidad_recurso_solicitado")        
+        recurso_esperado = accion_json.get("recurso_ofrecido")
+        cantidad_esperada = accion_json.get("cantidad_recurso_ofrecido")
 
-        if recurso_a_enviar and cantidad_a_enviar:
-            enviar_paquete(destinatario, recurso_a_enviar, cantidad_a_enviar)
-
+        if recurso_enviar and cantidad_enviar:
+            enviar_paquete(destinatario, recurso_enviar, cantidad_enviar)
+            
+            # Enviar carta de confirmación
+            cuerpo = cargar_carta("carta_confirmacion",
+                                  dest=destinatario,
+                                  alias=AGENT_NAME,
+                                  env_cant=cantidad_enviar,
+                                  env_item=recurso_enviar,
+                                  esp_cant=cantidad_esperada,
+                                  esp_item=recurso_esperado)
+            
+            enviar_carta(destinatario, "Paquete enviado", cuerpo)
+    
     elif tipo == "esperar":
         print("⏳ El agente decide esperar...")

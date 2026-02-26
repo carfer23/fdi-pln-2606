@@ -8,8 +8,111 @@ from consulta_ollama import ollama_generate, cargar_prompt
 
 from config import AGENT_NAME
 
+def fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial):
+    """
+    Fase 1: El agente envía cartas a otros usuarios para proponer intercambios.
+    """
+    print("\n--- 📨 FASE 1: Enviando cartas de difusión ---")
+
+    # Convertimos los dicts a listas para poder usar índices
+    lista_faltantes = list(faltantes.keys())
+    lista_sobrantes = list(sobrantes.keys())
+
+    # Si no nos falta nada, no iniciamos esta fase
+    if not lista_faltantes:
+        print("✅ No faltan recursos. Saltando fase de difusión.")
+        return
+
+    if len(usuarios) == 0:
+        print("No hay otros usuarios activos para enviar cartas.")
+        return
+
+    for i, usuario in enumerate(usuarios):
+        if usuario == AGENT_NAME:
+            continue
+
+        print(f"Preparando carta para {usuario}...")
+
+        # 1. Alternamos el recurso necesitado usando el índice del bucle
+        item_need = lista_faltantes[i % len(lista_faltantes)]
+        cant_total_necesitada = faltantes[item_need]
+        
+        # Pedimos solo una parte
+        #cant_a_pedir = max(1, cant_total_necesitada // 2) 
+        cant_a_pedir = 1
+
+        # 2. Alternamos el recurso ofrecido (si tenemos sobrantes)
+        if lista_sobrantes:
+            item_offer = lista_sobrantes[i % len(lista_sobrantes)]
+            total_disponible = sobrantes[item_offer]
+            
+            # Estrategia: Ofrecer solo una parte para tener margen de negociación
+            cant_a_ofrecer = max(1, total_disponible // 5)
+        
+            prompt = cargar_prompt("prompt_difusion", 
+                                    usuario=usuario,
+                                    cant_a_pedir=cant_a_pedir, 
+                                    item_need=item_need, 
+                                    cant_a_ofrecer=cant_a_ofrecer,
+                                    item_offer=item_offer)
+        
+            respuesta = ollama_generate(prompt, prompt_inicial)
+            ejecutar_accion(respuesta)
+            time.sleep(1)
+
+def fase_reactiva(prompt_inicial):
+    """
+    Fase 2: El agente reacciona a las cartas que llegan a su buzón.
+    """
+    print("\n--- 👁️ FASE 2: Esperando respuestas y paquetes ---")
+
+    # Bucle infinito para mantener al agente activo
+    while True:
+
+        # Chequear si se ha cumplido el objetivo
+        faltantes, sobrantes = calcular_estado()
+        if not faltantes:
+            print("🏆 ¡OBJETIVO CUMPLIDO! El agente ha conseguido todos los recursos.")
+            break
+        print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
+        
+        # Leer buzón
+        buzon = get_buzon()
+        
+        if not buzon:
+            print("💤 Buzón vacío. Esperando...")
+            time.sleep(5)
+        else:
+            print(f"📫 Tienes {len(buzon)} mensajes en el buzón. Procesando...")
+            
+            # Extraer la primera carta (asumiendo que buzon es un dict {id: datos})
+            if isinstance(buzon, dict):
+                carta_id = next(iter(buzon))
+                datos = buzon[carta_id]
+                
+                print(f"\nProcesando carta de {datos.get('remi')}...")
+                print(datos)
+                
+                prompt = cargar_prompt("prompt_procesar_carta",
+                                       usuario=datos.get('remi'),
+                                       contenido=datos.get('cuerpo'),
+                                       asunto=datos.get('asunto'),
+                                       faltantes=faltantes,
+                                       sobrantes=sobrantes)
+                
+                respuesta = ollama_generate(prompt, prompt_inicial)
+                ejecutar_accion(respuesta)
+                
+                # Eliminar la carta procesada
+                borrar_carta(carta_id)
+                time.sleep(5)
+            else:
+                print("⚠️ Formato de buzón inesperado.")
+
 def main():
-    print("Iniciando agente IA...")
+    """Función principal que orquesta el agente."""
+
+    print("🚀 Iniciando agente IA...")
 
     # ----- CONFIGURACIÓN INICIAL -------------------------------
     usuarios = get_gente()
@@ -28,120 +131,12 @@ def main():
                                    sobrantes=sobrantes,
                                    usuarios=usuarios)
 
-    # ----- FASE DE DIFUSIÓN DE CARTAS --------------------------
-    print("\n--- 📨 FASE 1: Enviando cartas a todos ---")
+    # ----- EJECUCIÓN DE LAS FASES ------------------------------
+    # 1. El agente envía cartas para buscar los recursos que le faltan
+    fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial)
 
-    # Convertimos los dicts a listas para poder usar índices
-    lista_faltantes = list(faltantes.keys())
-    lista_sobrantes = list(sobrantes.keys())
-
-    if len(usuarios) == 0:
-        print("No hay otros usuarios activos.")
-
-    for i, usuario in enumerate(usuarios):
-        if usuario == AGENT_NAME: continue
-
-        print(f"Enviando carta a {usuario}...")
-
-        # 1. Alternamos el recurso necesitado usando el índice del bucle
-        item_need = lista_faltantes[i % len(lista_faltantes)]
-        cant_total_necesitada = faltantes[item_need]
-        
-        # Pedimos solo una parte o el total si es poco (ej. pedir de 5 en 5)
-        #cant_a_pedir = max(1, cant_total_necesitada // 2) 
-        cant_a_pedir = 1
-
-        # 2. Alternamos el recurso ofrecido (si tenemos)
-        if lista_sobrantes:
-            item_offer = lista_sobrantes[i % len(lista_sobrantes)]
-            total_disponible = sobrantes[item_offer]
-            
-            # ESTRATEGIA: No dar todo. Ofrecemos solo el 20% de lo que nos sobra
-            # para tener margen de negociación con otros.
-            cant_a_ofrecer = max(1, total_disponible // 5)
-        else:
-            item_offer = "nada"
-            cant_a_ofrecer = 0
-        
-        prompt = cargar_prompt("prompt_difusion", 
-                                usuario=usuario,
-                                cant_a_pedir=cant_a_pedir, 
-                                item_need=item_need, 
-                                cant_a_ofrecer=cant_a_ofrecer,
-                                item_offer=item_offer)
-        
-        print(f"PROMPT: {prompt}")
-        
-        respuesta = ollama_generate(prompt, prompt_inicial)
-        print(respuesta)
-        ejecutar_accion(respuesta)
-        time.sleep(1)
-
-    # ----- FASE REACTIVA ---------------------------------------
-    print("\n--- 👁️ FASE 2: Esperando respuestas y paquetes ---")
-
-    # Número de cartas pedientes de procesar
-    num_cartas_pendientes = 0
-
-    # Bucle infinito
-    while True:
-
-        # Chequear si se ha cumplido el objetivo
-        faltantes, sobrantes = calcular_estado()
-        if not faltantes:
-            print("🏆 ¡OBJETIVO CUMPLIDO!")
-            break
-        print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
-        
-        # Leer buzón
-        buzon_dict = get_buzon()
-
-        mensajes_nuevos = []
-        if len(buzon_dict) == 0:
-            print("Buzón vacío.")
-        else:
-            for carta_id, datos in buzon_dict.items():
-                mensajes_nuevos.append({
-                    "de": datos["remi"],
-                    "asunto": datos["asunto"],
-                    "contenido": datos["cuerpo"]
-                })
-
-        # Si hay cartas nuevas o cartas pendientes -> las procesamos
-        if mensajes_nuevos or num_cartas_pendientes > 0:
-            # Número actual de cartas en el buzón
-            num_cartas = len(mensajes_nuevos)
-            print(f"Tienes {num_cartas-num_cartas_pendientes} cartas nuevas. TOTAL: {num_cartas} cartas en el buzón.")
-            # Número actual de cartas pendientes de procesar
-            num_cartas_pendientes = num_cartas
-
-            # Leemos la primera carta (la más antigua)
-            primera_carta = mensajes_nuevos[-1] 
-
-            print(primera_carta)
-
-            prompt = cargar_prompt("prompt_procesar_carta",
-                                   usuario=primera_carta['de'],
-                                   contenido=primera_carta['contenido'],
-                                   asunto=primera_carta['asunto'],
-                                   faltantes=faltantes,
-                                   sobrantes=sobrantes)
-            
-            #print(f"PROMPT: {prompt}")
-            
-            respuesta = ollama_generate(prompt, prompt_inicial)
-            ejecutar_accion(respuesta)
-
-            # Eliminar carta procesada del buzón
-            borrar_carta(carta_id)
-            # Una carta pendiente menos
-            num_cartas_pendientes -= 1
-            
-        else:
-            print("💤 Nada nuevo en el buzón. Esperando...")
-        
-        time.sleep(3)
-
+    # 2. El agente entra en modo reactivo para responder a los mensajes
+    fase_reactiva(prompt_inicial)
 
 if __name__ == "__main__":
     main()
