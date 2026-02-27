@@ -5,6 +5,7 @@ import json
 
 from config import URL_BASE, AGENT_NAME
 
+
 def get_gente():
     """Mira los alias registrados."""
     url = f"{URL_BASE}/gente"
@@ -12,18 +13,19 @@ def get_gente():
 
     if r.status_code == 200:
         gente = json.loads(r.text)
-    
+
         usuarios = []
         for user in gente:
-            # Si el servidor devuelve un diccionario 
+            # Si el servidor devuelve un diccionario
             if isinstance(user, dict):
-                usuarios.append(user.get('alias'))
-            
+                usuarios.append(user.get("alias"))
+
             else:
                 usuarios.append(user)
 
         return usuarios
     return []
+
 
 def get_info():
     """Obtiene toda la info del agente de una vez."""
@@ -36,16 +38,17 @@ def get_info():
         print(f"Error conectando: {e}")
     return None
 
+
 def calcular_estado():
     """Calcula qué sobra y qué falta."""
     info = get_info()
-    
+
     recursos = info.get("Recursos", {})
     objetivo = info.get("Objetivo", {})
-    
+
     faltantes = {}
     sobrantes = {}
-    
+
     # Calcular faltantes (lo que necesito - lo que tengo)
     for k, v in objetivo.items():
         actual = recursos.get(k, 0)
@@ -61,8 +64,9 @@ def calcular_estado():
         diff = v - necesario
         if diff > 0:
             sobrantes[k] = diff
-            
+
     return faltantes, sobrantes
+
 
 def get_buzon():
     """Obtiene el contenido del buzón."""
