@@ -1,8 +1,11 @@
 """Módulo con métodos para realizar acciones."""
 
 import requests
+from pathlib import Path
 
-from config import AGENT_NAME, URL_BASE
+from .config import AGENT_NAME, URL_BASE
+
+P1_DIR = Path(__file__).resolve().parent
 
 
 def register_agent(name: str):
@@ -66,7 +69,7 @@ def enviar_paquete(destinatario, objeto, cantidad):
 def cargar_carta(nombre_archivo, **kwargs):
     """Carga una plantilla de carta."""
 
-    with open(f"cartas/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
+    with open(f"{P1_DIR}/cartas/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
         plantilla = f.read()
     return plantilla.format(**kwargs)
 

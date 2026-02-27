@@ -2,12 +2,6 @@
 
 En esta práctica se implementa un agente de IA que es capaz de gestionar recursos e intercambiarlos con otros agentes para llegar a acumular los recursos objetivo definidos.
 
-FALTA:
-- explicacion breve de cada .py
-- explicar mas o menos que hace el agente
-- cómo clonar el repositorio?
-- instrucciones para ejecutar wheel
-
 ## Configuración
 
 ### Ollama
@@ -39,7 +33,11 @@ OLLAMA_MODEL=qwen3-vl:8b
 ## Ejecución
 
 ### Modo wheel
-COMPLETAR
+Instalar el wheel y ejecutarlo con los siguientes comandos:
+```
+uv tool install <ruta al wheel>
+uv run fdi-pln-2606-p1
+```
 
 ### Modo laboratorio
 IMPORTANTE: ejecutar siempre desde el directorio p1/.

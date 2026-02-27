@@ -3,11 +3,15 @@
 import time
 import random
 
-from info import get_gente, calcular_estado, get_buzon
-from acciones import register_agent, ejecutar_accion, borrar_carta
-from consulta_ollama import ollama_generate, cargar_prompt
+from .info import get_gente, calcular_estado, get_buzon
+from .acciones import register_agent, ejecutar_accion, borrar_carta
+from .consulta_ollama import ollama_generate, cargar_prompt
 
-from config import AGENT_NAME
+from .config import AGENT_NAME
+
+TIMEOUT_DIFUSION = (
+    10  # Tiempo en segundos para esperar antes de reenviar cartas de difusión
+)
 
 
 def fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial):
@@ -22,7 +26,7 @@ def fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial):
 
     # Si no nos falta nada, no iniciamos esta fase
     if not lista_faltantes:
-        print("✅ No faltan recursos. Saltando fase de difusión.")
+        print("No faltan recursos. Saltando fase de difusión.")
         return
 
     if len(usuarios) == 0:
@@ -37,19 +41,15 @@ def fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial):
 
         # 1. Seleccionamos aleatoriamente un recurso necesitado
         item_need = random.choice(lista_faltantes)
-        cant_total_necesitada = faltantes[item_need]
 
-        # Pedimos solo una parte
-        # cant_a_pedir = max(1, cant_total_necesitada // 2)
+        # Pedimos solo una unidad para aumentar las probabilidades de aceptación
         cant_a_pedir = 1
 
         # 2. Alternamos el recurso ofrecido (si tenemos sobrantes)
         if lista_sobrantes:
             item_offer = random.choice(lista_sobrantes)
-            total_disponible = sobrantes[item_offer]
 
-            # Estrategia: Ofrecer solo una parte para tener margen de negociación
-            # cant_a_ofrecer = max(1, total_disponible // 5)
+            # Ofrecemos solo una unidad para no pedir demasiado a cambio
             cant_a_ofrecer = 1
 
             prompt = cargar_prompt(
@@ -73,17 +73,17 @@ def fase_reactiva(prompt_inicial, usuarios):
     """
     print("\n--- 👁️ FASE 2: Esperando respuestas y paquetes ---")
 
-    TIMEOUT_DIFUSION = 15
-
     tiempo_ultima_accion = time.time()
 
     # Bucle infinito para mantener al agente activo
     while True:
-        # Chequear si se ha cumplido el objetivo
         faltantes, sobrantes = calcular_estado()
+
+        # Chequear si se ha cumplido el objetivo
         if not faltantes:
             print("🏆 ¡OBJETIVO CUMPLIDO! El agente ha conseguido todos los recursos.")
             break
+
         print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
 
         # Leer buzón
@@ -162,7 +162,10 @@ def main():
         usuarios=usuarios,
     )
 
+    # ----- EJECUCIÓN DE LAS FASES ------------------------------
+    # 1. El agente envía cartas para buscar los recursos que le faltan
     fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial)
+    # 2. El agente entra en modo reactivo para responder a los mensajes
     fase_reactiva(prompt_inicial, usuarios)
 
 

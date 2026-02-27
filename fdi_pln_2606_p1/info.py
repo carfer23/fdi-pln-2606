@@ -1,13 +1,13 @@
-"""Módulo para los métodos que obtienen información del endpoint /info."""
+"""Módulo para los métodos que obtienen información de los endpoints /info y /gente."""
 
 import requests
 import json
 
-from config import URL_BASE, AGENT_NAME
+from .config import URL_BASE, AGENT_NAME
 
 
 def get_gente():
-    """Mira los alias registrados."""
+    """Mira los alias registrados en el servidor y devuelve una lista con los nombres."""
     url = f"{URL_BASE}/gente"
     r = requests.get(url, params={"agente": AGENT_NAME})
 
@@ -36,11 +36,20 @@ def get_info():
             return json.loads(r.text)
     except Exception as e:
         print(f"Error conectando: {e}")
-    return None
+        return None
+
+
+def get_buzon():
+    """Obtiene el contenido completo del buzón."""
+    info = get_info()
+    return info.get("Buzon", [])
 
 
 def calcular_estado():
-    """Calcula qué sobra y qué falta."""
+    """
+    A partir de los recursos disponibles y los recursos objetivo,
+    calcula los recursos faltantes y sobrantes. Devuelve dos diccionarios.
+    """
     info = get_info()
 
     recursos = info.get("Recursos", {})
@@ -66,9 +75,3 @@ def calcular_estado():
             sobrantes[k] = diff
 
     return faltantes, sobrantes
-
-
-def get_buzon():
-    """Obtiene el contenido del buzón."""
-    info = get_info()
-    return info.get("Buzon", [])

@@ -1,15 +1,17 @@
 """Módulo que maneja la interacción con Ollama."""
 
 import ollama
-import re
 import json
+from pathlib import Path
 
-from config import OLLAMA_MODEL
+from .config import OLLAMA_MODEL
+
+P1_DIR = Path(__file__).resolve().parent
 
 
 def cargar_prompt(nombre_archivo, **kwargs):
     """Carga un prompt."""
-    with open(f"prompts/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
+    with open(f"{P1_DIR}/prompts/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
         plantilla = f.read()
     return plantilla.format(**kwargs)
 
