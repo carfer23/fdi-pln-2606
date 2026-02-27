@@ -1,6 +1,7 @@
 """Módulo principal."""
 
 import time
+import random
 
 from info import get_gente, calcular_estado, get_buzon
 from acciones import register_agent, ejecutar_accion, borrar_carta
@@ -33,8 +34,8 @@ def fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial):
 
         print(f"Preparando carta para {usuario}...")
 
-        # 1. Alternamos el recurso necesitado usando el índice del bucle
-        item_need = lista_faltantes[i % len(lista_faltantes)]
+        # 1. Seleccionamos aleatoriamente un recurso necesitado
+        item_need = random.choice(lista_faltantes)
         cant_total_necesitada = faltantes[item_need]
         
         # Pedimos solo una parte
@@ -43,11 +44,12 @@ def fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial):
 
         # 2. Alternamos el recurso ofrecido (si tenemos sobrantes)
         if lista_sobrantes:
-            item_offer = lista_sobrantes[i % len(lista_sobrantes)]
+            item_offer = random.choice(lista_sobrantes)
             total_disponible = sobrantes[item_offer]
             
             # Estrategia: Ofrecer solo una parte para tener margen de negociación
-            cant_a_ofrecer = max(1, total_disponible // 5)
+            #cant_a_ofrecer = max(1, total_disponible // 5)
+            cant_a_ofrecer = 1
         
             prompt = cargar_prompt("prompt_difusion", 
                                     usuario=usuario,

@@ -117,6 +117,7 @@ def ejecutar_accion(accion_json):
                                   esp_item=recurso_esperado)
             
             enviar_carta(destinatario, "Paquete enviado", cuerpo)
+            print(f"Carta de confirmación de envío: {cuerpo}")
     
     elif tipo == "esperar":
         print("⏳ El agente decide esperar...")
