@@ -20,10 +20,12 @@ VOWELS_BYT = set(b"aeiouAEIOU")
 C_OPEN_BRACE = 123; C_CLOSE_BRACE = 125; C_TILDE = 126; C_PIPE = 124
 C_S = 115; C_T = 116; C_U = 117; C_V = 118; C_UNDERSCORE = 95
 C_BACKTICK = 96; C_B = 98; C_A = 97; C_N = 110
+C_DEL = 127
 
 # Números codificados: i=0, j=1, ... r=9
 DIGIT_LETTERS_BYT = b"ijklmnopqr"
 LETTER_TO_DIGIT_BYT = {ch: str(idx).encode("ascii") for idx, ch in enumerate(DIGIT_LETTERS_BYT)}
+DIGIT_TO_LETTER_BYT = {str(idx): bytes([ch]) for idx, ch in enumerate(DIGIT_LETTERS_BYT)}
 
 def caesar_bytes(data: bytes, k: int) -> bytes:
     """
@@ -59,14 +61,27 @@ def clean_decoded_bytes(data: bytes) -> bytes:
     quote_open = True  # para }
     in_paren = False   # paréntesis abierto por ~
 
+    def close_paren() -> None:
+        # Limpia ruido antes del cierre: espacios y marcador DEL (0x7f).
+        while out and out[-1] in (ord(" "), C_DEL):
+            out.pop()
+        out.extend(b")")
+
     while i < n:
         b = data[i]
 
         # Si hay puntuación fuerte (s, t, u, v) y hay paréntesis abierto, se cierra
         if in_paren and (b in (C_S, C_T, C_U, C_V) or data[i:i+2] == b"\n\n"):
-            if out and out[-1] == ord(" "): out.pop()
-            out.extend(b")")
+            close_paren()
             in_paren = False
+
+        # DEL (0x7f) marca cierre de paréntesis en varios textos.
+        if b == C_DEL:
+            if in_paren:
+                close_paren()
+                in_paren = False
+            i += 1
+            continue
 
         # {{ -> raya (toggle)
         if b == C_OPEN_BRACE and i + 1 < n and data[i+1] == C_OPEN_BRACE:
@@ -93,8 +108,7 @@ def clean_decoded_bytes(data: bytes) -> bytes:
         # ~ -> abre paréntesis; si ya había uno abierto, lo cerramos antes
         elif b == C_TILDE:
             if in_paren: 
-                if out and out[-1] == ord(" "): out.pop()
-                out.extend(b")")
+                close_paren()
             if out and out[-1] not in (ord(" "), ord("\n")) and not out.endswith((b"(", b"\xab", b"\x2d\x2d ")):
                 out.extend(b" ")
             out.extend(b"(")
@@ -179,8 +193,39 @@ def clean_decoded_bytes(data: bytes) -> bytes:
 
     # Si queda un paréntesis abierto al final, se cierra
     if in_paren:
-        if out and out[-1] == ord(" "): out.pop()
-        out.extend(b")")
+        close_paren()
+
+    return bytes(out)
+
+def encode_text_to_plain_bytes(text: str) -> bytes:
+    """
+    Convierte texto UTF-8 a la representación intermedia previa al César.
+    La estrategia evita colisiones con los marcadores del decodificador:
+    - letras minúsculas ASCII se emiten en mayúscula (el decoder las baja)
+    - letras mayúsculas ASCII se emiten como letra + 'b' (marcador de mayúscula)
+    - dígitos se emiten como i..r (0..9), evitando conflicto con 7/8
+    """
+    out = bytearray()
+    for idx, ch in enumerate(text):
+        if "0" <= ch <= "9":
+            out.extend(DIGIT_TO_LETTER_BYT[ch])
+            continue
+
+        if "a" <= ch <= "z":
+            out.extend(ch.upper().encode("ascii"))
+            continue
+
+        if "A" <= ch <= "Z":
+            out.extend(ch.encode("ascii"))
+            out.extend(b"b")
+            continue
+
+        try:
+            out.extend(ch.encode("latin-1"))
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"Caracter no soportado en latin-1 en posición {idx + 1}: {ch!r}"
+            ) from exc
 
     return bytes(out)
 
@@ -200,12 +245,39 @@ def decode(fichero: Path, k: int = 45):
     final_bytes = clean_decoded_bytes(plain_bytes)
     result_utf8 = final_bytes.decode("latin-1").replace("--", "—")
     
-    typer.echo(result_utf8)
+    # No añadimos salto automático para preservar exactamente el contenido.
+    typer.echo(result_utf8, nl=False)
 
 @app.command()
-def encode(fichero: Path, k: int = 45):
-    """Codifica un fichero de UTF8 a PLNCG26 (No implementado)."""
-    typer.echo("Operación 'encode' no implementada todavía.")
+def encode(
+    fichero: Path,
+    k: int = 45,
+    salida: Path | None = typer.Option(
+        None, "--salida", "-o", help="Ruta del fichero .bin de salida"
+    ),
+):
+    """Codifica un fichero UTF-8 a PLNCG26."""
+    # Validacion basica de entrada.
+    if not fichero.exists():
+        typer.echo(f"Error: El archivo {fichero} no existe.", err=True)
+        raise typer.Exit(1)
+
+    # Si no se indica salida, usa el mismo nombre con extension .bin.
+    if salida is None:
+        salida = fichero.with_suffix(".bin")
+
+    # Lee el .txt (UTF-8) y lo pasa al formato interno previo al cifrado.
+    text = fichero.read_text(encoding="utf-8")
+    try:
+        plain_bytes = encode_text_to_plain_bytes(text)
+    except ValueError as err:
+        typer.echo(f"Error: {err}", err=True)
+        raise typer.Exit(1)
+
+    # Aplica el Cesar inverso para producir el formato PLNCG26 y lo guarda.
+    encoded_bytes = caesar_bytes(plain_bytes, -k)
+    salida.write_bytes(encoded_bytes)
+    typer.echo(f"Fichero codificado generado en: {salida}")
 
 def main():
     app()
