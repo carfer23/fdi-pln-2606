@@ -1,6 +1,9 @@
 from pathlib import Path
 import argparse
 import re
+import typer
+
+app = typer.Typer()
 
 # Mapeo de acentos
 ACCENT_MAP = {
@@ -230,25 +233,34 @@ def clean_decoded_text(decoded: str) -> str:
 
     return text
 
-def main():
-    ap = argparse.ArgumentParser(description="Conversor unicode (UTF-8) a PLNCG26 y viceversa")
-    ap.add_argument("-i", "--input", required=True, help="Archivo de entrada (bytes codificados)")
-    ap.add_argument("-k", type=int, default=45)
-    args = ap.parse_args()
-
+@app.command()
+def decode(fichero: Path, k: int = 45):
+    """Decodifica un fichero de PLNCG26 a UTF8."""
+    if not fichero.exists():
+        typer.echo(f"Error: El archivo {fichero} no existe.", err=True)
+        raise typer.Exit(1)
+    
     # Lee el archivo como bytes
-    data = Path(args.input).read_bytes()
+    data = fichero.read_bytes()
 
     # Aplica el desplazamiento César
-    plain_bytes = caesar_bytes(data, args.k)
+    plain_bytes = caesar_bytes(data, k)
 
     # Decodifica usando latin-1 para preservar los bytes
-    decoded = plain_bytes.decode("latin-1")
+    decoded_raw = plain_bytes.decode("latin-1", errors="ignore")
 
     # Aplica las reglas de transformación al texto decodificado
-    cleaned = clean_decoded_text(decoded)
+    final_text = clean_decoded_text(decoded_raw)
+    
+    typer.echo(final_text)
 
-    print(cleaned)
+@app.command()
+def encode(fichero: Path, k: int = 45):
+    """Codifica un fichero de UTF8 a PLNCG26 (No implementado)."""
+    typer.echo("Operación 'encode' no implementada todavía.")
+
+def main():
+    app()
 
 if __name__ == "__main__":
     main()
