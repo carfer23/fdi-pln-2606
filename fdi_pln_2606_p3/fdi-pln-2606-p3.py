@@ -52,6 +52,15 @@ DIGIT_LETTERS_BYT = b"ijklmnopqr"
 LETTER_TO_DIGIT_BYT = {ch: str(idx).encode("ascii") for idx, ch in enumerate(DIGIT_LETTERS_BYT)}
 DIGIT_TO_LETTER_BYT = {str(idx): bytes([ch]) for idx, ch in enumerate(DIGIT_LETTERS_BYT)}
 
+# Alfabeto esperado en la fase intermedia (tras César, antes de limpiar)
+ALLOWED_LOWER_PLAIN_BYT = set(b"abijklmnopqrstuv")
+CORE_PLAIN_BYTES = (
+    set(range(B_A_UPPER, B_Z_UPPER + 1))
+    | ALLOWED_LOWER_PLAIN_BYT
+    | {C_OPEN_BRACE, C_CLOSE_BRACE, C_VIRGULA, C_PIPE, C_UNDERSCORE, C_BACKTICK, C_DEL, ord(b"7"), ord(b"8")}
+)
+ACCENT_PREV_BYTES = set(b"AEIOUaeioubB") # letras que pueden llevar tilde + 'b' para mayúscula tras mayúscula
+
 
 # ----- FUNCIONES ----------------------------------------------------------
 
@@ -275,6 +284,83 @@ def encode_text_to_plain_bytes(text: str) -> bytes:
 
     return bytes(out)
 
+def estimate_plncg26_probability(data: bytes, k: int = 45) -> tuple[float, dict[str, float]]:
+    """
+    Estima la probabilidad de que un binario siga el formato PLNCG26.
+
+    Se basa en la "forma" del flujo: alfabeto de tokens esperado, 
+    coherencia de marcadores y calidad del resultado tras aplicar César + limpieza.
+
+    :param data: Contenido del archivo original (.bin).
+    :param k: Desplazamiento César con el que se intentará decodificar.
+    :return: probabilidad en [0,1].
+    """
+    if not data:
+        return 0.0
+
+    # Aplica César para obtener la forma intermedia
+    plain = caesar_bytes(data, k)
+    n = len(plain)
+
+    # Calcula cuántos bytes pertenecen al alfabeto esperado
+    core_hits = sum(1 for b in plain if b in CORE_PLAIN_BYTES)
+    core_charset_ratio = core_hits / n # valor entre 0 y 1
+
+    # Cuántos bytes de letras minúsculas no permitidas hay (ruido)
+    invalid_lower = sum(1 for b in plain if B_A_LOWER <= b <= B_Z_LOWER and b not in ALLOWED_LOWER_PLAIN_BYT)
+    invalid_lower_ratio = invalid_lower / n
+
+    marker_total = 0
+    marker_valid = 0
+
+    # Recorre el texto para evaluar la validez de los marcadores (b, _, `) según su contexto
+    for i, b in enumerate(plain):
+        if b == C_B:
+            marker_total += 1
+            if i > 0 and B_A_UPPER <= plain[i - 1] <= B_Z_UPPER:
+                marker_valid += 1
+        elif b in (C_UNDERSCORE, C_BACKTICK):
+            marker_total += 1
+            if i > 0 and plain[i - 1] in ACCENT_PREV_BYTES:
+                marker_valid += 1
+        elif b == C_A:
+            marker_total += 1
+            if i > 0 and plain[i - 1] in (B_N_UPPER, B_N_LOWER, C_B):
+                marker_valid += 1
+
+    marker_validity = (marker_valid / marker_total) if marker_total else 0.5
+
+    # Evalúa la coherencia de los guiones ({{)
+    open_braces = sum(1 for b in plain if b == C_OPEN_BRACE)
+    brace_pairs = sum(1 for i in range(n - 1) if plain[i] == C_OPEN_BRACE and plain[i + 1] == C_OPEN_BRACE)
+    double_brace_ratio = (2 * brace_pairs / open_braces) if open_braces else 0.5
+
+    # Aplica la limpieza final y evalúa la calidad del resultado UTF-8
+    final_bytes = clean_decoded_bytes(plain)
+    decoded_text = final_bytes.decode("utf-8", errors="ignore")
+    kept_utf8_len = len(decoded_text.encode("utf-8"))
+    utf8_keep_ratio = kept_utf8_len / max(1, len(final_bytes))
+    printable_ratio = (
+        sum(1 for ch in decoded_text if ch.isprintable() or ch in "\n\r\t") / max(1, len(decoded_text))
+    )
+
+    # Combina las métricas calculadas para dar la probabilidad final
+    raw_score = (
+        0.30 * core_charset_ratio
+        + 0.15 * (1.0 - invalid_lower_ratio)
+        + 0.20 * marker_validity
+        + 0.10 * double_brace_ratio
+        + 0.15 * utf8_keep_ratio
+        + 0.10 * printable_ratio
+    )
+
+    # Para ficheros muy cortos, la evidencia es débil: acercamos a 0.5.
+    confidence_by_len = min(1.0, n / 120.0)
+    probability = 0.5 + (raw_score - 0.5) * confidence_by_len
+    probability = max(0.0, min(1.0, probability))
+
+    return probability
+
 
 # ----- FUNCIONES DECODE Y ENCODE -------------------------------------------------
 
@@ -328,6 +414,33 @@ def encode(fichero: Path, k: int = 45):
     encoded_bytes = caesar_bytes(plain_bytes, -k)
 
     typer.echo(encoded_bytes)
+
+@app.command()
+def detect(fichero: Path, k: int = 45):
+    """
+    Estima la probabilidad de que un fichero binario sea texto en PLNCG26.
+
+    :param fichero: Ruta al archivo .bin que se quiere analizar.
+    :param k: Desplazamiento César a probar (por defecto, 45).
+    :param detallar: Si es True, imprime métricas internas.
+    """
+    if not fichero.exists():
+        typer.echo(f"Error: El archivo {fichero} no existe.", err=True)
+        raise typer.Exit(1)
+
+    data = fichero.read_bytes()
+    probability = estimate_plncg26_probability(data, k)
+
+    typer.echo(f"Probabilidad PLNCG26: {probability * 100:.2f}%")
+
+    if probability >= 0.80:
+        typer.echo("Diagnóstico: Muy probable que sea PLNCG26.")
+    elif probability >= 0.60:
+        typer.echo("Diagnóstico: Probable, pero con incertidumbre.")
+    elif probability >= 0.40:
+        typer.echo("Diagnóstico: Inconcluso.")
+    else:
+        typer.echo("Diagnóstico: Poco probable que sea PLNCG26.")
 
 def main():
     app()
