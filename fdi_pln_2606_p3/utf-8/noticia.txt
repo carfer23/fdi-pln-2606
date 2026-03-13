@@ -1,9 +1,9 @@
- El Ñandú Junior viaja a Mar del Plata con la ilusión de defender el titulo del Campeonato Argentino Juvenil
+# El Ñandú Junior viaja a Mar del Plata con la ilusión de defender el titulo del Campeonato Argentino Juvenil
 
-El seleccionado juvenil de Menores de 17 años que dirige Santiago Sánchez Molina
+**El seleccionado juvenil de Menores de 17 años que dirige Santiago Sánchez Molina
 se mide ante Tucumán M17 este domingo desde las 16.30 por la tercera fecha del
 Argentino Juvenil en la Feliz. Ambos clasificados a semifinales, buscarán el
-primer lugar del grupo y evitar en semis a Buenos Aires.
+primer lugar del grupo y evitar en semis a Buenos Aires.**
 
 Con la ilusión de defender el título obtenido el año pasado, el seleccionado
 juvenil de Rosario viaja a Mar del Plata para afrontar el concentrado del
@@ -27,7 +27,7 @@ de la zona 1 y casi seguro el hecho de evitar a Las Águilas en semis.
 
 El plantel de Rosario M17 lo integran:
 
- Forwards
+## Forwards
 
 Agustín Di Stefano (Gimnasia y Esgrima Rosario)
 
@@ -35,7 +35,7 @@ Agustín Di Stefano (Gimnasia y Esgrima Rosario)
 
 Benjamín Trevia Arce (Jockey Club Rosario)
 
-Bruno D'ottavio (Gimnasia y Esgrima Rosario)
+Bruno D’ottavio (Gimnasia y Esgrima Rosario)
 
 Emilio Pereyra Tauzy (Jockey Club Rosario)
 
@@ -59,7 +59,7 @@ Thiago Méndez (Jockey Club Rosario)
 
 Tomás González del Cerro (Jockey Club Rosario)
 
- Backs
+## Backs
 
 Augusto Corgnali (Jockey Club Rosario)
 

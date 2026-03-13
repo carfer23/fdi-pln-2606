@@ -48,6 +48,7 @@ VOWELS_BYT = set(b"aeiouAEIOU")  # vocales
 OPEN_BRACE = 123  # {{, abre guión
 CLOSE_BRACE = 125  # }, abre comillas « »
 VIRGULA = 126  # ~, abre paréntesis
+CLOSE_PAREN_MARK = 127  # \x7f, cierra paréntesis
 PIPE = 124  # |, apóstrofe
 S = 115
 T = 116
@@ -55,6 +56,8 @@ U = 117
 V = 118  # signos de puntuación
 UNDERSCORE = 95  # _, tilde en la vocal anterior
 BACKTICK = 96  # `, diéresis
+HASH_MARK = 145  # \x91, título Markdown (#)
+BOLD_MARK = 146  # \x92, negrita Markdown (*)
 SPACE = 32  # espacio
 NL = 10  # nueva línea
 A_UPPER = 65  # A
@@ -71,7 +74,7 @@ ACCENT_MAP_UTF8 = {
     ord("e"): b"\xc3\xa9",
     ord("i"): b"\xc3\xad",
     ord("o"): b"\xc3\xb3",
-    ord("u"): b"\xc3\xfa",
+    ord("u"): b"\xc3\xba",
     ord("A"): b"\xc3\x81",
     ord("E"): b"\xc3\x89",
     ord("I"): b"\xc3\x8d",
@@ -111,6 +114,9 @@ CORE_PLAIN_BYTES = (
         PIPE,
         UNDERSCORE,
         BACKTICK,
+        HASH_MARK,
+        BOLD_MARK,
+        CLOSE_PAREN_MARK,
         ord("7"),
         ord("8"),
     }  # caracteres especiales de formato
@@ -146,9 +152,6 @@ def clean_decoded_bytes(data: bytes) -> bytes:
     # Saltos de párrafo y de línea
     data = data.replace(b"77", b"\n\n").replace(b"7", b"\n")
 
-    # Inicio de texto o tras \n\n) empieza con 8 (espacio) -> negrita (NO FUNCIONA)
-    # data = re.sub(rb"(^|\n\n)8(.*?)(?=\n\n|$)", rb"\1**\2**", data, flags=re.DOTALL)
-
     # Espacios
     data = data.replace(b"8", b" ")
 
@@ -173,11 +176,6 @@ def clean_decoded_bytes(data: bytes) -> bytes:
 
     while i < n:
         b = data[i]
-
-        # Cerrar paréntesis abierto -> si hay puntuación fuerte (s, t, u, v)
-        if in_paren and (b in (S, T, U, V) or data[i : i + 2] == b"\n\n"):
-            close_paren()
-            in_paren = False
 
         # {{ -> abre guión (toggle)
         if b == OPEN_BRACE and i + 1 < n and data[i + 1] == OPEN_BRACE:
@@ -213,6 +211,14 @@ def clean_decoded_bytes(data: bytes) -> bytes:
                 out.extend(b" ")
             out.extend(b"(")
             in_paren = True
+            i += 1
+            continue
+
+        # \x7f -> cierra paréntesis
+        elif b == CLOSE_PAREN_MARK:
+            if in_paren:
+                close_paren()
+                in_paren = False
             i += 1
             continue
 
@@ -264,6 +270,18 @@ def clean_decoded_bytes(data: bytes) -> bytes:
                 last_byte = out[-1]
                 if last_byte in UMLAUT_MAP_UTF8:
                     out[-1:] = UMLAUT_MAP_UTF8[last_byte]
+            i += 1
+            continue
+
+        # \x91 -> título Markdown (#)
+        elif b == HASH_MARK:
+            out.extend(b"#")
+            i += 1
+            continue
+
+        # \x92 -> negrita Markdown (*)
+        elif b == BOLD_MARK:
+            out.extend(b"*")
             i += 1
             continue
 
@@ -341,6 +359,8 @@ def encode_text_to_plain_bytes(text: str) -> bytes:
         ")": b"\x7f",
         " ": b"8",
         "\n": b"7",
+        "#": b"\x91",
+        "*": b"\x92",
     }
 
     i = 0
