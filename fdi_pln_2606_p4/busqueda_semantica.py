@@ -1,81 +1,63 @@
-import math
-import json
-import urllib.request
-
-MODELO_EMBEDDINGS = "nomic-embed-text"
-OLLAMA_URL = "http://localhost:11434"
-
-
-def _ollama_embed(model, input_text):
-    """Llama a la API de Ollama para generar embeddings."""
-    data = json.dumps({"model": model, "input": input_text}).encode()
-    req = urllib.request.Request(
-        f"{OLLAMA_URL}/api/embed",
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())
-
-
-def _similitud_coseno(a, b):
-    """Calcula la similitud coseno entre dos vectores."""
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
-
+import re
+from utils import nlp, similitud_coseno, tokenizar_query
 
 MAX_CARACTERES = 6000
-
+MAX_OUTPUT = 500
+MAX_TEXT = 300
 
 def generar_embeddings(capitulos):
-    """Genera embeddings para cada capítulo usando Ollama.
+    """Genera embeddings para cada capítulo usando spaCy.
     Modifica los diccionarios in-place añadiendo la clave 'embedding'."""
+    embeddings = []
     for cap in capitulos:
         texto = cap["texto"][:MAX_CARACTERES]
-        respuesta = _ollama_embed(MODELO_EMBEDDINGS, texto)
-        cap["embedding"] = respuesta["embeddings"][0]
+        doc = nlp(texto)
+        cap["embedding"] = doc.vector
+        embeddings.append(doc.vector)
+    
+    return embeddings
 
-
-def busqueda_embeddings(consulta, capitulos, top_k=5):
-    """Busca los capítulos más similares a la consulta usando similitud coseno.
-    Devuelve una lista de tuplas (título, fragmento) con los top_k resultados."""
-    respuesta = _ollama_embed(MODELO_EMBEDDINGS, consulta)
-    emb_consulta = respuesta["embeddings"][0]
+def busqueda_semantica(consulta, capitulos, top_k=5):
+    """Busca los capítulos más similares a la consulta. Por cada capítulo, también busca el párrafo más relevante.
+    Devuelve una lista de tuplas (título, fragmento)."""
+    tokens_query = tokenizar_query(consulta)
+    consulta_filtrada = " ".join(tokens_query)
+    
+    doc_consulta = nlp(consulta_filtrada)
+    emb_consulta = doc_consulta.vector
 
     similitudes = []
     for cap in capitulos:
-        sim = _similitud_coseno(emb_consulta, cap["embedding"])
+        sim = similitud_coseno(emb_consulta, cap["embedding"])
         similitudes.append((sim, cap))
 
     similitudes.sort(key=lambda x: x[0], reverse=True)
 
     resultados = []
     for sim, cap in similitudes[:top_k]:
-        fragmento = cap["texto"][:300]
-        if len(cap["texto"]) > 300:
-            fragmento += "..."
+        # Dividir el capítulo en párrafos para extraer el más relevante
+        parrafos = [p.strip() for p in re.split(r'\n+', cap["texto"])]
+        if not parrafos:
+            parrafos = [cap["texto"][:MAX_TEXT]] # Si no hay párrafos, se usa el inicio del texto
+            
+        mejor_sim_p = -1
+        mejor_parrafo = parrafos[0]
+        
+        # Calcular el embedding de cada párrafo para buscar la misma similitud pero más granulada
+        for p in parrafos:
+            emb_p = nlp(p).vector
+            sim_p = similitud_coseno(emb_consulta, emb_p)
+            if sim_p > mejor_sim_p:
+                mejor_sim_p = sim_p
+                mejor_parrafo = p
+                
+        # Limitar la longitud del párrafo si es demasiado largo
+        if len(mejor_parrafo) > MAX_OUTPUT:
+            mejor_parrafo = mejor_parrafo[:MAX_OUTPUT] + "..."
+
+        fragmento = f"... {mejor_parrafo} ..."
 
         porcentaje = sim * 100
-        texto = f"[dim](similitud: {porcentaje:.1f}%)[/dim]\n{fragmento}"
-        resultados.append((cap["titulo"], texto))
+        resultados.append((porcentaje, cap["titulo"], mejor_parrafo))
 
     return resultados
-
-
-def obtener_capitulos_similares(consulta, capitulos, top_k=3):
-    """Devuelve los capítulos más similares (como diccionarios) para uso interno (RAG)."""
-    respuesta = _ollama_embed(MODELO_EMBEDDINGS, consulta)
-    emb_consulta = respuesta["embeddings"][0]
-
-    similitudes = []
-    for cap in capitulos:
-        sim = _similitud_coseno(emb_consulta, cap["embedding"])
-        similitudes.append((sim, cap))
-
-    similitudes.sort(key=lambda x: x[0], reverse=True)
-
-    return [cap for _, cap in similitudes[:top_k]]

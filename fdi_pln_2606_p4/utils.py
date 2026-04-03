@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 import spacy
+import math
 
 # Cargar modelo de spaCy
 nlp = spacy.load("es_core_news_sm")
@@ -20,6 +21,7 @@ def procesar_texto_capitulo(texto):
     # Recorremos cada token para extraer lemas y sus posiciones
     for token in doc:
         lema = token.lemma_.lower()
+        # Se ignoran stop words, puntuación o espacios vacíos
         if not token.is_stop and not token.is_punct and lema.strip():
             lemas.add(lema)
             if lema not in posiciones:
@@ -82,3 +84,12 @@ def tokenizar_query(texto):
         for token in doc
         if not token.is_stop and not token.is_punct and token.lemma_.strip()
     ])
+
+def similitud_coseno(a, b):
+    """Calcula la similitud coseno entre dos vectores."""
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)

@@ -1,9 +1,5 @@
 import json
-import math
 import os
-import re
-import unicodedata
-import urllib.error
 import urllib.request
 
 # # Textual no renderiza bien si TERM llega como "dumb".
@@ -16,20 +12,11 @@ from textual.widgets import Button, Input, Select, Static
 
 from utils import separar_capitulos
 from busqueda_clasica import busqueda_clasica
+from busqueda_semantica import busqueda_semantica, generar_embeddings
+from busqueda_rag import busqueda_rag
 
-MODELO_EMBEDDINGS = "nomic-embed-text"
-MODELO_CHAT = "llama3"
 OLLAMA_URL = "http://localhost:11434"
 CACHE_FILE = "embeddings_cache.json"
-
-TOKEN_RE = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+")
-STOPWORDS = {
-    "de", "la", "que", "el", "en", "y", "a", "los", "del", "se", "las", "por", "un",
-    "para", "con", "no", "una", "su", "al", "lo", "como", "mas", "pero", "sus", "le",
-    "ya", "o", "este", "si", "porque", "esta", "entre", "cuando", "muy", "sin", "sobre",
-    "tambien", "me", "hasta", "hay", "donde", "quien", "desde", "todo", "nos", "durante",
-    "todos", "uno", "les", "ni", "contra", "otros", "ese", "eso", "ante", "ellos",
-}
 
 QUIJOTE_ASCII = r"""
                   /\       ,,                                        ./
@@ -57,75 +44,12 @@ __        {|\ \'  / )  /     \\O|                              |_|\ \
 """
 
 
-def _normalizar_token(token):
-    token = token.lower()
-    token = unicodedata.normalize("NFD", token)
-    token = "".join(ch for ch in token if unicodedata.category(ch) != "Mn")
-    return token
-
-
-def _tokenizar(texto):
-    tokens = []
-    for token in TOKEN_RE.findall(texto):
-        token_n = _normalizar_token(token)
-        if len(token_n) > 2 and token_n not in STOPWORDS:
-            tokens.append(token_n)
-    return tokens
-
-
 def _ollama_disponible():
     try:
         with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=2):
             return True
     except Exception:
         return False
-
-
-def _get_embedding(texto):
-    """Llama a Ollama para obtener el vector del texto."""
-    data = json.dumps({"model": MODELO_EMBEDDINGS, "input": texto[:3000]}).encode()
-    req = urllib.request.Request(
-        f"{OLLAMA_URL}/api/embed",
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        payload = json.loads(resp.read())
-
-    if "embeddings" not in payload or not payload["embeddings"]:
-        raise RuntimeError("Ollama no devolvió embeddings válidos.")
-
-    return payload["embeddings"][0]
-
-
-def _chat_ollama(prompt):
-    data = json.dumps(
-        {
-            "model": MODELO_CHAT,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-        }
-    ).encode()
-    req = urllib.request.Request(
-        f"{OLLAMA_URL}/api/chat",
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        payload = json.loads(resp.read())
-
-    contenido = payload.get("message", {}).get("content")
-    if not contenido:
-        raise RuntimeError("Ollama no devolvió una respuesta válida para RAG.")
-
-    return contenido
-
-
-def _similitud_coseno(a, b):
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
 
 
 class BuscadorQuijote(App):
@@ -145,14 +69,13 @@ class BuscadorQuijote(App):
     async def inicializar_datos(self):
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
-        #contenedor.mount(Static("⏳ Cargando capítulos de El Quijote..."))
 
         self.capitulos = separar_capitulos()
         self.embeddings_listos = False
 
         if not self.capitulos:
             contenedor.remove_children()
-            contenedor.mount(Static("❌ No se pudo leer '2000-h.htm'."))
+            contenedor.mount(Static("❌ No se pudo leer el texto de El Quijote."))
             return
 
         if os.path.exists(CACHE_FILE):
@@ -172,44 +95,24 @@ class BuscadorQuijote(App):
             except Exception:
                 contenedor.mount(Static("⚠️ No se pudo leer la caché; se regenerará al usar modo semántico."))
 
-        #if not self.embeddings_listos:
-            #contenedor.mount(Static("ℹ️ Los modos semántico y RAG generarán embeddings solo al primer uso."))
-
-        #contenedor.mount(Static("✅ ¡Listo! Introduce tu búsqueda arriba."))
+        contenedor.mount(Static("✅ Aplicación iniciada correctamente."))
 
     async def asegurar_embeddings(self):
+        """Genera o carga los embeddings necesarios para la búsqueda semántica. Devuelve True si están listos."""
         if self.embeddings_listos:
             return True
 
         contenedor = self.query_one("#resultados")
-
-        if not _ollama_disponible():
-            contenedor.mount(
-                Static("❌ Ollama no está activo en localhost:11434. Ejecuta `ollama serve` y reintenta.")
-            )
-            return False
-
-        contenedor.mount(Static("🤖 Generando embeddings (solo la primera vez)..."))
-        todos_embs = []
+        contenedor.mount(Static("🤖 Generando embeddings con spaCy..."))
 
         try:
-            total = len(self.capitulos)
-            for i, cap in enumerate(self.capitulos, start=1):
-                emb = _get_embedding(cap["texto"])
-                cap["embedding"] = emb
-                todos_embs.append(emb)
-
-                if i % 10 == 0 or i == total:
-                    contenedor.mount(Static(f"   > Procesados {i}/{total} capítulos..."))
+            embeddings = generar_embeddings(self.capitulos)
 
             with open(CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(todos_embs, f)
+                json.dump(embeddings, f)
 
             self.embeddings_listos = True
             return True
-        except (urllib.error.URLError, TimeoutError) as e:
-            contenedor.mount(Static(f"❌ Error conectando con Ollama: {e}"))
-            return False
         except Exception as e:
             contenedor.mount(Static(f"❌ Error generando embeddings: {e}"))
             return False
@@ -251,7 +154,7 @@ class BuscadorQuijote(App):
 
         try:
             if modo == "clasica":
-                # Se realiza la búsqueda clásica
+                # Búsqueda clásica
                 resultados = busqueda_clasica(query, self.capitulos)
 
                 if not resultados:
@@ -269,61 +172,35 @@ class BuscadorQuijote(App):
                 if not ok:
                     return
 
-                emb_q = _get_embedding(query)
-                for cap in self.capitulos:
-                    sim = _similitud_coseno(emb_q, cap["embedding"])
-                    resultados.append((sim, cap))
-                resultados.sort(key=lambda x: x[0], reverse=True)
+                # Busqueda semántica
+                resultados_sem = busqueda_semantica(query, self.capitulos)
+                
+                if not resultados_sem:
+                    contenedor.mount(Static("No se encontraron resultados."))
+                    return
+                
+                # Se muestra el título y fragmento de cada resultado
+                for porcentaje, titulo, fragmento in resultados_sem:
+                    texto_final = f"[b yellow]{titulo}[/b yellow] (Similitud: {porcentaje:.1f}%)\n\n{fragmento}"
+                    contenedor.mount(Static(texto_final, classes="resultado-item"))
+                return
 
             elif modo == "rag":
+                if not _ollama_disponible():
+                    contenedor.mount(Static("❌ Ollama no está activo en localhost:11434. Necesario para RAG."))
+                    return
+                
                 ok = await self.asegurar_embeddings()
                 if not ok:
                     return
 
-                emb_q = _get_embedding(query)
-                ranking_semantico = []
-                for cap in self.capitulos:
-                    sim = _similitud_coseno(emb_q, cap["embedding"])
-                    ranking_semantico.append((sim, cap))
-                ranking_semantico.sort(key=lambda x: x[0], reverse=True)
+                # Búsqueda RAG
+                respuesta = busqueda_rag(query, self.capitulos)
 
-                tokens_q = set(_tokenizar(query))
-                ranking_clasico = []
-                for cap in self.capitulos:
-                    score = sum(cap["frecuencias"].get(token, 0) for token in tokens_q)
-                    if score > 0:
-                        ranking_clasico.append((score, cap))
-                ranking_clasico.sort(key=lambda x: x[0], reverse=True)
-
-                capitulos_contexto = []
-                vistos = set()
-                for _, cap in ranking_semantico[:3]:
-                    if cap["titulo"] not in vistos:
-                        vistos.add(cap["titulo"])
-                        capitulos_contexto.append(cap)
-                for _, cap in ranking_clasico[:3]:
-                    if cap["titulo"] not in vistos:
-                        vistos.add(cap["titulo"])
-                        capitulos_contexto.append(cap)
-
-                if not capitulos_contexto:
-                    contenedor.remove_children()
-                    contenedor.mount(Static("❌ No se encontró contexto para responder."))
+                if not respuesta:
+                    contenedor.mount(Static("No se encontraron resultados."))
                     return
 
-                contexto = "\n\n---\n\n".join(
-                    f"[{cap['titulo']}]\n{cap['texto'][:900]}" for cap in capitulos_contexto
-                )
-                prompt = (
-                    "Eres un experto en El Quijote. Responde en español usando solo los pasajes.\n"
-                    "Si no está en los pasajes, dilo claramente.\n"
-                    "Al final añade 'Fuentes:' con los títulos usados.\n\n"
-                    f"PASAJES:\n{contexto}\n\n"
-                    f"PREGUNTA: {query}\n\nRESPUESTA:"
-                )
-
-                respuesta = _chat_ollama(prompt)
-                contenedor.remove_children()
                 contenedor.mount(
                     Static(
                         f"[b yellow]Respuesta RAG[/b yellow]\n\n{respuesta}",
@@ -332,21 +209,6 @@ class BuscadorQuijote(App):
                 )
                 return
 
-            else:
-                contenedor.remove_children()
-                contenedor.mount(Static(f"❌ Modo no implementado: {modo}"))
-                return
-
-            contenedor.remove_children()
-            if not resultados:
-                contenedor.mount(Static("❌ No se encontraron resultados."))
-            else:
-                for score, cap in resultados[:5]:
-                    texto_final = (
-                        f"[b yellow]{cap['titulo']}[/b yellow] (Relevancia: {score:.2f})\n\n"
-                        f"{cap['texto'][:300]}..."
-                    )
-                    contenedor.mount(Static(texto_final, classes="resultado-item"))
         except Exception as e:
             contenedor.mount(Static(f"[b red]Error:[/b red] {e}"))
 
