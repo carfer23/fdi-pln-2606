@@ -4,54 +4,32 @@ import spacy
 # Cargar modelo de spaCy
 nlp = spacy.load("es_core_news_sm")
 
-CHUNK_SIZE = 2000  # caracteres por chunk
-OVERLAP = 200  # caracteres de solapamiento entre chunks
-
-
-def _dividir_en_chunks(texto, chunk_size=CHUNK_SIZE, overlap=OVERLAP):
-    """Divide un texto en chunks con solapamiento, intentando cortar por frases (puntos)."""
-    chunks = []
-    inicio = 0
-    while inicio < len(texto):
-        fin = inicio + chunk_size
-        if fin >= len(texto):
-            chunks.append((texto[inicio:], inicio))
-            break
-        # Intentar cortar en el último punto dentro del rango
-        punto = texto.rfind(". ", inicio, fin)
-        if punto > inicio:
-            fin = punto + 2  # incluir el punto y espacio
-        chunks.append((texto[inicio:fin], inicio))
-        inicio = fin - overlap
-    return chunks
-
+# Configuración para división de texto en chunks
+# CHUNK_SIZE = 2000  # caracteres por chunk
+# OVERLAP = 200  # caracteres de solapamiento entre chunks
 
 def procesar_texto_capitulo(texto):
-    """Indexa un capítulo. Devuelve lemas, posiciones y frecuencias."""
-    lemas = set()
-    posiciones = {}  # lema -> lista de tuplas (inicio, fin)
-    frecuencias = {}  # lema -> número de apariciones
+    """Indexa un capítulo. Devuelve lemas y las posiciones (índices) en el texto original y frecuencias."""
+    # Procesamos el texto con spaCy para obtener lemas y sus posiciones
+    doc = nlp(texto)
 
-    posiciones_vistas = set()  # evitar duplicados por overlap
-    for chunk, offset in _dividir_en_chunks(texto):
-        doc = nlp(chunk)
-        for token in doc:
-            lema = token.lemma_.lower()
-            if not token.is_stop and not token.is_punct and lema.strip():
-                pos_inicio = token.idx + offset
-                pos_fin = pos_inicio + len(token.text)
-                if (pos_inicio, pos_fin) in posiciones_vistas:
-                    continue
-                posiciones_vistas.add((pos_inicio, pos_fin))
-                lemas.add(lema)
-                if lema not in posiciones:
-                    posiciones[lema] = []
-                    frecuencias[lema] = 0
-                posiciones[lema].append((pos_inicio, pos_fin))
-                frecuencias[lema] += 1
+    lemas = set()
+    posiciones = {} # Diccionario: lema -> lista de tuplas (inicio, fin)
+    frecuencias = {} # Diccionario: lema -> número de apariciones
+
+    # Recorremos cada token para extraer lemas y sus posiciones
+    for token in doc:
+        lema = token.lemma_.lower()
+        if not token.is_stop and not token.is_punct and lema.strip():
+            lemas.add(lema)
+            if lema not in posiciones:
+                posiciones[lema] = []
+                frecuencias[lema] = 0
+            # Guardamos dónde empieza y dónde acaba la palabra original
+            posiciones[lema].append((token.idx, token.idx + len(token.text)))
+            frecuencias[lema] += 1
 
     return lemas, posiciones, frecuencias
-
 
 def separar_capitulos():
     """Lee el HTML del Quijote, separa los capítulos y devuelve una lista de diccionarios con
@@ -79,7 +57,8 @@ def separar_capitulos():
                     nodo = nodo.find_next_sibling()
 
                 texto_completo = " ".join(texto)
-
+                
+                # Procesamos y extraemos posiciones y frecuencias de los lemas
                 lemas, posiciones, frecuencias = procesar_texto_capitulo(texto_completo)
 
                 capitulos.append({
@@ -93,9 +72,9 @@ def separar_capitulos():
 
     return capitulos
 
-
 def tokenizar_query(texto):
     """Solo para la consulta del usuario. Devuelve un set de lemas."""
+    # Se procesa la consulta con spaCy
     doc = nlp(texto)
 
     return set([

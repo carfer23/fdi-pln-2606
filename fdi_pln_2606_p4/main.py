@@ -5,17 +5,17 @@ import re
 import unicodedata
 import urllib.error
 import urllib.request
-from collections import Counter
 
-from bs4 import BeautifulSoup
-
-# Textual no renderiza bien si TERM llega como "dumb".
-if os.environ.get("TERM", "").lower() in {"", "dumb"}:
-    os.environ["TERM"] = "xterm-256color"
+# # Textual no renderiza bien si TERM llega como "dumb".
+# if os.environ.get("TERM", "").lower() in {"", "dumb"}:
+#     os.environ["TERM"] = "xterm-256color"
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Button, Input, Select, Static
+
+from utils import separar_capitulos
+from busqueda_clasica import busqueda_clasica
 
 MODELO_EMBEDDINGS = "nomic-embed-text"
 MODELO_CHAT = "llama3"
@@ -71,44 +71,6 @@ def _tokenizar(texto):
         if len(token_n) > 2 and token_n not in STOPWORDS:
             tokens.append(token_n)
     return tokens
-
-
-def separar_capitulos():
-    """Lee el HTML y preprocesa tokens/frecuencias para búsqueda clásica."""
-    try:
-        with open("2000-h.htm", "r", encoding="utf-8") as f:
-            html = f.read()
-    except FileNotFoundError:
-        return []
-
-    soup = BeautifulSoup(html, "html.parser")
-    capitulos = []
-
-    for h3 in soup.find_all("h3"):
-        a = h3.find("a")
-        if not (a and a.get("name") and "_" in a["name"]):
-            continue
-
-        titulo = h3.get_text(strip=True)
-        texto_nodos = []
-        nodo = h3.find_next_sibling()
-        while nodo and nodo.name != "h3":
-            if nodo.name == "p":
-                texto_nodos.append(nodo.get_text(" ", strip=True))
-            nodo = nodo.find_next_sibling()
-
-        texto_completo = " ".join(texto_nodos)
-        tokens = _tokenizar(texto_completo)
-        frecuencias = Counter(tokens)
-
-        capitulos.append({
-            "titulo": titulo,
-            "texto": texto_completo,
-            "lemas": set(frecuencias.keys()),
-            "frecuencias": dict(frecuencias),
-        })
-
-    return capitulos
 
 
 def _ollama_disponible():
@@ -169,11 +131,11 @@ def _similitud_coseno(a, b):
 class BuscadorQuijote(App):
     CSS = """
     Screen { layout: vertical; background: #1a1a1a; }
-    .logo { text-align: center; color: goldenrod; margin: 1; }
+    Input, Select,  Button { margin: 1; }
     #controles { height: auto; align: center middle; }
-    Input { margin: 1; border: double goldenrod; }
-    #resultados { height: 1fr; margin: 1; border: solid gray; padding: 1; }
+    #resultados { height: 1fr; margin: 1; border: solid white; padding: 1; }
     .resultado-item { margin-bottom: 1; border-bottom: dashed white 20%; padding: 1; }
+    .logo { text-align: center; color: goldenrod; margin: 1; }
     """
 
     def on_mount(self):
@@ -183,7 +145,7 @@ class BuscadorQuijote(App):
     async def inicializar_datos(self):
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
-        contenedor.mount(Static("⏳ Cargando capítulos de El Quijote..."))
+        #contenedor.mount(Static("⏳ Cargando capítulos de El Quijote..."))
 
         self.capitulos = separar_capitulos()
         self.embeddings_listos = False
@@ -210,10 +172,10 @@ class BuscadorQuijote(App):
             except Exception:
                 contenedor.mount(Static("⚠️ No se pudo leer la caché; se regenerará al usar modo semántico."))
 
-        if not self.embeddings_listos:
-            contenedor.mount(Static("ℹ️ Los modos semántico y RAG generarán embeddings solo al primer uso."))
+        #if not self.embeddings_listos:
+            #contenedor.mount(Static("ℹ️ Los modos semántico y RAG generarán embeddings solo al primer uso."))
 
-        contenedor.mount(Static("✅ ¡Listo! Introduce tu búsqueda arriba."))
+        #contenedor.mount(Static("✅ ¡Listo! Introduce tu búsqueda arriba."))
 
     async def asegurar_embeddings(self):
         if self.embeddings_listos:
@@ -253,13 +215,14 @@ class BuscadorQuijote(App):
             return False
 
     def compose(self) -> ComposeResult:
-        yield Static(QUIJOTE_ASCII, classes="logo")
+        """Construye la interfaz de usuario con Textual."""
+        #yield Static(QUIJOTE_ASCII, classes="logo")
         yield Horizontal(
             Select(
                 [
-                    ("Clásica (TF)", "clasica"),
-                    ("Semántica (IA)", "semantica"),
-                    ("RAG (respuesta)", "rag"),
+                    ("Búsqueda clásica", "clasica"),
+                    ("Búsqueda semántica", "semantica"),
+                    ("RAG", "rag"),
                 ],
                 value="clasica",
                 id="modo",
@@ -267,7 +230,7 @@ class BuscadorQuijote(App):
             Button("Salir", id="btn_salir", variant="error"),
             id="controles",
         )
-        yield Input(placeholder="Ej: los molinos de viento...", id="busqueda")
+        yield Input(placeholder="Introducir consulta...", id="busqueda")
         yield VerticalScroll(id="resultados")
 
     async def on_input_submitted(self, event: Input.Submitted):
@@ -276,14 +239,10 @@ class BuscadorQuijote(App):
             return
 
         modo = self.query_one("#modo").value
-        nombre_modo = {
-            "clasica": "clásico",
-            "semantica": "semántico",
-            "rag": "rag",
-        }.get(modo, str(modo))
+
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
-        contenedor.mount(Static(f"🔍 Buscando '{query}' en modo {nombre_modo}..."))
+
         self.run_worker(self.procesar_busqueda(query, modo))
 
     async def procesar_busqueda(self, query, modo):
@@ -292,12 +251,18 @@ class BuscadorQuijote(App):
 
         try:
             if modo == "clasica":
-                tokens_q = set(_tokenizar(query))
-                for cap in self.capitulos:
-                    score = sum(cap["frecuencias"].get(token, 0) for token in tokens_q)
-                    if score > 0:
-                        resultados.append((score, cap))
-                resultados.sort(key=lambda x: x[0], reverse=True)
+                # Se realiza la búsqueda clásica
+                resultados = busqueda_clasica(query, self.capitulos)
+
+                if not resultados:
+                    contenedor.mount(Static("No se encontraron resultados"))
+                    return
+
+                for score, titulo, contexto in resultados:
+                    # Se crea un bloque para cada resultado
+                    texto = f"[b yellow]{titulo}[/b yellow] (Relevancia: {score:.4f})\n\n{contexto}"
+                    contenedor.mount(Static(texto, classes="resultado-item"))
+                return
 
             elif modo == "semantica":
                 ok = await self.asegurar_embeddings()
@@ -386,6 +351,7 @@ class BuscadorQuijote(App):
             contenedor.mount(Static(f"[b red]Error:[/b red] {e}"))
 
     def on_button_pressed(self, event: Button.Pressed):
+        """Botón para salir de la aplicación."""
         if event.button.id == "btn_salir":
             self.exit()
 
