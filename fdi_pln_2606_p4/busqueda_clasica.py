@@ -1,8 +1,26 @@
+"""
+Este módulo implementa un motor de búsqueda clásica basado en similitud léxica,
+utilizando el modelo TF-IDF (Term Frequency - Inverse Document Frequency).
+
+El algoritmo de búsqueda sigue este proceso:
+1. Tokeniza y lematiza la consulta del usuario para unificar los términos.
+2. Calcula el valor IDF (Inverse Document Frequency) de cada término, dando mayor peso a las palabras más raras en la colección.
+3. Para cada capítulo que contiene alguno de los términos, calcula su puntuación sumando el TF-IDF (TF * IDF) de cada término coincidente.
+4. Extrae un fragmento de contexto centrado en la primera aparición del término principal y resalta las palabras encontradas.
+5. Ordena todos los resultados por su puntuación final (score) de mayor a menor relevancia.
+"""
+
 from utils import tokenizar_query
 import math
 
 def busqueda_clasica(query, capitulos):
-    """Busca la palabra (o palabras) en los capítulos. Devuelve una lista de tuplas (score, título, fragmento)."""
+    """
+    Busca la palabra (o palabras) en los capítulos. Devuelve una lista de tuplas (score, título, fragmento).
+    
+    :param query: La consulta ingresada por el usuario.
+    :param capitulos: La lista de capítulos procesados con lemas, posiciones y frecuencias.
+    :return: Lista de tuplas (score, título, fragmento) ordenada por relevancia.
+    """
     resultados = []
     palabras_busqueda = tokenizar_query(query)
 

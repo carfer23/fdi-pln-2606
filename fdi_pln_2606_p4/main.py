@@ -1,7 +1,13 @@
+"""
+Módulo principal de la aplicación de búsqueda en El Quijote usando Textual.
+Define la interfaz de usuario, maneja eventos y coordina las funciones de búsqueda.
+"""
+
 import json
 import os
 import numpy as np
 import asyncio
+from typing import Any, Dict, List
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
@@ -25,6 +31,11 @@ def _ollama_disponible():
 
 
 class BuscadorQuijote(App):
+    """
+    Aplicación interactiva de Textual para buscar en el corpus de El Quijote.
+    Soporta búsqueda modular: clásica (TF-IDF), semántica (Embeddings) y RAG (LLM).
+    """
+
     CSS = """
     Screen { layout: vertical; background: #1a1a1a; }
     Input, Select,  Button { margin: 1; }
@@ -34,29 +45,47 @@ class BuscadorQuijote(App):
     .logo { text-align: center; color: goldenrod; margin: 1; }
     """
 
-    app_lista = False # Flag para silenciar eventos tempranos antes de terminar la carga
+    def __init__(self) -> None:
+        super().__init__()
+        self.app_lista: bool = False
+        self.embeddings_listos: bool = False
+        self.capitulos: List[Dict[str, Any]] = []
 
-    def on_mount(self):
+    # ==================
+    # CONSTRUCCIÓN DE UI
+    # ==================
+
+    def compose(self) -> ComposeResult:
+        """Construye la jerarquía de componentes de la interfaz de usuario."""
+        #yield Static(QUIJOTE_ASCII, classes="logo")
+        yield Horizontal(
+            Select(
+                [
+                    ("Búsqueda clásica", "clasica"),
+                    ("Búsqueda semántica", "semantica"),
+                    ("RAG", "rag"),
+                ],
+                value="clasica",
+                id="modo",
+            ),
+            Button("Regenerar embeddings", id="btn_regenerar", variant="warning"),
+            Button("Salir", id="btn_salir", variant="error"),
+            id="controles",
+        )
+        yield Input(placeholder="Introducir consulta...", id="busqueda")
+        yield VerticalScroll(id="resultados")
+
+    def on_mount(self) -> None:
+        """Inicializa los datos y procesos en background al cargar la pantalla."""
         self.query_one("#busqueda").focus()
         self.run_worker(self.inicializar_datos())
 
-    def mostrar_instrucciones(self, mensaje_extra=""):
-        """Muestra las instrucciones de uso en el panel principal."""
-        contenedor = self.query_one("#resultados")
-        contenedor.remove_children()
-        
-        contenido = "✅ [b]Sistema listo para buscar[/b]\n\n"
-        if mensaje_extra:
-            contenido += f"{mensaje_extra}\n\n"
-            
-        contenido += "💡 [i]Instrucciones de uso:[/i]\n"
-        contenido += " 1. Selecciona el modo de búsqueda en el menú superior.\n"
-        contenido += " 2. Escribe tu consulta en la barra inferior y presiona Enter.\n"
-        contenido += " 3. La respuesta se mostrará en este panel."
-        
-        contenedor.mount(Static(contenido, classes="resultado-item"))
+    # =============================
+    # LÓGICA DE DATOS Y EMBEDDINGS
+    # =============================
 
     async def inicializar_datos(self):
+        """Inicializa la aplicación cargando los capítulos, generando o recuperando embeddings y mostrando instrucciones."""
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
 
@@ -119,26 +148,43 @@ class BuscadorQuijote(App):
         except Exception as e:
             contenedor.mount(Static(f"❌ Error generando embeddings: {e}"))
             return False
+        
+    async def regenerar_embeddings(self):
+        """Fuerza la regeneración de embeddings sobrescribiendo el archivo cache."""
+        contenedor = self.query_one("#resultados")
+        contenedor.remove_children()
+        contenedor.mount(Static("⏳ Regenerando los embeddings forzosamente... por favor, espera."))
+        await asyncio.sleep(0.1) # Pausa breve para que se renderice el mensaje anterior
 
-    def compose(self) -> ComposeResult:
-        """Construye la interfaz de usuario con Textual."""
-        #yield Static(QUIJOTE_ASCII, classes="logo")
-        yield Horizontal(
-            Select(
-                [
-                    ("Búsqueda clásica", "clasica"),
-                    ("Búsqueda semántica", "semantica"),
-                    ("RAG", "rag"),
-                ],
-                value="clasica",
-                id="modo",
-            ),
-            Button("Regenerar embeddings", id="btn_regenerar", variant="warning"),
-            Button("Salir", id="btn_salir", variant="error"),
-            id="controles",
-        )
-        yield Input(placeholder="Introducir consulta...", id="busqueda")
-        yield VerticalScroll(id="resultados")
+        # Desactivamos el flag para asegurar que se llamen de nuevo
+        self.embeddings_listos = False
+        
+        ok = await self.asegurar_embeddings()
+        if ok:
+            self.mostrar_instrucciones("[green]✅ Embeddings regenerados y guardados con éxito.[/green]")
+
+    # ============================================
+    # MANEJO DE EVENTOS DE INTERFAZ E INTERACCIÓN
+    # ============================================
+
+    def mostrar_instrucciones(self, mensaje_extra=""):
+        """Muestra las instrucciones de uso en el panel principal."""
+        contenedor = self.query_one("#resultados")
+        contenedor.remove_children()
+        
+        contenido = "✅ [b]Sistema listo para buscar[/b]\n\n"
+        if mensaje_extra:
+            contenido += f"{mensaje_extra}\n\n"
+            
+        contenido += "💡 [i]Instrucciones de uso:[/i]\n"
+        contenido += " 1. Selecciona el modo de búsqueda en el menú superior.\n"
+        contenido += " 2. Escribe tu consulta en la barra inferior y presiona Enter.\n"
+        contenido += " 3. La respuesta se mostrará en este panel."
+        
+        contenedor.mount(Static(contenido, classes="resultado-item"))
+
+        # Mostrar ASCII art
+        contenedor.mount(Static(QUIJOTE_ASCII, classes="logo"))
 
     def on_select_changed(self, event: Select.Changed):
         """Limpia los resultados y la búsqueda al cambiar el modo de operación."""
@@ -157,7 +203,15 @@ class BuscadorQuijote(App):
             # Devolver el foco al input
             input_busqueda.focus()
 
+    def on_button_pressed(self, event: Button.Pressed):
+        """Maneja las pulsaciones de los botones de la interfaz."""
+        if event.button.id == "btn_salir":
+            self.exit()
+        elif event.button.id == "btn_regenerar":
+            self.run_worker(self.regenerar_embeddings())
+
     async def on_input_submitted(self, event: Input.Submitted):
+        """Maneja la consulta del usuario al presionar Enter en el input de búsqueda."""
         query = event.value.strip()
         if not query:
             return
@@ -170,6 +224,12 @@ class BuscadorQuijote(App):
         self.run_worker(self.procesar_busqueda(query, modo))
 
     async def procesar_busqueda(self, query, modo):
+        """
+        Procesa la consulta del usuario según el modo seleccionado y muestra los resultados.
+        
+        :param query: La consulta ingresada por el usuario.
+        :param modo: El modo de búsqueda seleccionado ("clasica", "semantica" o "rag").
+        """
         contenedor = self.query_one("#resultados")
         resultados = []
 
@@ -232,27 +292,6 @@ class BuscadorQuijote(App):
 
         except Exception as e:
             contenedor.mount(Static(f"[b red]Error:[/b red] {e}"))
-
-    def on_button_pressed(self, event: Button.Pressed):
-        """Maneja las pulsaciones de los botones de la interfaz."""
-        if event.button.id == "btn_salir":
-            self.exit()
-        elif event.button.id == "btn_regenerar":
-            self.run_worker(self.regenerar_embeddings())
-
-    async def regenerar_embeddings(self):
-        """Fuerza la regeneración de embeddings sobrescribiendo el archivo cache."""
-        contenedor = self.query_one("#resultados")
-        contenedor.remove_children()
-        contenedor.mount(Static("⏳ Regenerando los embeddings forzosamente... por favor, espera."))
-        await asyncio.sleep(0.1) # Pausa breve para que se renderice el mensaje anterior
-
-        # Desactivamos el flag para asegurar que se llamen de nuevo
-        self.embeddings_listos = False
-        
-        ok = await self.asegurar_embeddings()
-        if ok:
-            self.mostrar_instrucciones("[green]✅ Embeddings regenerados y guardados con éxito.[/green]")
 
 
 if __name__ == "__main__":

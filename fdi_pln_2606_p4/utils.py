@@ -1,3 +1,5 @@
+"""Módulo con funciones de utilidad para el procesamiento de texto, generación de embeddings y cálculo de similitud."""
+
 from bs4 import BeautifulSoup
 import spacy
 import math
@@ -8,11 +10,30 @@ from config import SPACY_MODEL
 nlp = spacy.load(SPACY_MODEL)
 
 # Configuración para división de texto en chunks
-# CHUNK_SIZE = 2000  # caracteres por chunk
-# OVERLAP = 200  # caracteres de solapamiento entre chunks
+CHUNK_SIZE = 2000  # caracteres por chunk
+OVERLAP = 200  # caracteres de solapamiento entre chunks
 
-def procesar_texto_capitulo(texto):
-    """Indexa un capítulo. Devuelve lemas y las posiciones (índices) en el texto original y frecuencias."""
+def crear_chunks(texto, chunk_size, overlap):
+    """
+    Divide un texto en fragmentos (chunks) de tamaño dictado, con solapamiento.
+    
+    :param texto: El texto completo a dividir.
+    :param chunk_size: El tamaño máximo de cada chunk en caracteres.
+    :param overlap: El número de caracteres que se solapan entre chunks consecutivos.
+    :return: Lista de chunks de texto.
+    """
+    chunks = []
+    start = 0
+    texto_len = len(texto)
+    while start < texto_len:
+        end = start + chunk_size
+        chunk = texto[start:end]
+        chunks.append(chunk)
+        start += chunk_size - overlap # Avanzamos restando el solapamiento
+    return chunks
+
+def procesar_texto(texto):
+    """Indexa un texto. Devuelve lemas y las posiciones (índices) en el texto original y frecuencias."""
     # Procesamos el texto con spaCy para obtener lemas y sus posiciones
     doc = nlp(texto)
 
@@ -65,17 +86,20 @@ def separar_capitulos():
 
                 texto_completo = "\n\n".join(texto)
                 
-                # Procesamos y extraemos posiciones y frecuencias de los lemas
-                lemas, posiciones, frecuencias = procesar_texto_capitulo(texto_completo)
+                # Procesamos y extraemos posiciones y frecuencias de los lemas por chunk
+                chunks = crear_chunks(texto_completo, CHUNK_SIZE, OVERLAP)
+                
+                for i, chunk in enumerate(chunks):
+                    lemas, posiciones, frecuencias = procesar_texto(chunk)
 
-                capitulos.append({
-                    "id": nombre,
-                    "titulo": titulo,
-                    "texto": texto_completo,
-                    "lemas": lemas,
-                    "posiciones": posiciones,
-                    "frecuencias": frecuencias,
-                })
+                    capitulos.append({
+                        "id": f"{nombre}_part{i+1}",
+                        "titulo": f"{titulo}",
+                        "texto": chunk,
+                        "lemas": lemas,
+                        "posiciones": posiciones,
+                        "frecuencias": frecuencias,
+                    })
 
     return capitulos
 
