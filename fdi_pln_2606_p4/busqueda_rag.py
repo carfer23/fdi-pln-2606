@@ -1,106 +1,89 @@
-import json
-import urllib.request
-import re
-import unicodedata
-from utils import nlp, similitud_coseno
+import ollama
+from busqueda_clasica import busqueda_clasica
+from busqueda_semantica import busqueda_semantica
 
-MODELO_LLM = "llama3"
-OLLAMA_URL = "http://localhost:11434"
+from config import OLLAMA_MODEL
 
-TOKEN_RE = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+")
-STOPWORDS = {
-    "de", "la", "que", "el", "en", "y", "a", "los", "del", "se", "las", "por", "un",
-    "para", "con", "no", "una", "su", "al", "lo", "como", "mas", "pero", "sus", "le",
-    "ya", "o", "este", "si", "porque", "esta", "entre", "cuando", "muy", "sin", "sobre",
-    "tambien", "me", "hasta", "hay", "donde", "quien", "desde", "todo", "nos", "durante",
-    "todos", "uno", "les", "ni", "contra", "otros", "ese", "eso", "ante", "ellos",
-}
+# MODELO_LLM = "llama3"
+    
+def ollama_chat(prompt: str, system_prompt: str = "") -> str | None:
+    """Consulta a Ollama."""
 
-def _normalizar_token(token):
-    token = token.lower()
-    token = unicodedata.normalize("NFD", token)
-    token = "".join(ch for ch in token if unicodedata.category(ch) != "Mn")
-    return token
+    try:
+        response = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+        )
+        content = response["message"]["content"]
 
-def _tokenizar(texto):
-    tokens = []
-    for token in TOKEN_RE.findall(texto):
-        token_n = _normalizar_token(token)
-        if len(token_n) > 2 and token_n not in STOPWORDS:
-            tokens.append(token_n)
-    return tokens
+        return content
 
-def obtener_capitulos_similares(consulta, capitulos, top_k=3):
-    """Devuelve los capítulos más similares (como diccionarios) para uso interno (RAG)."""
-    doc_consulta = nlp(consulta)
-    emb_consulta = doc_consulta.vector
-
-    similitudes = []
-    for cap in capitulos:
-        sim = similitud_coseno(emb_consulta, cap["embedding"])
-        similitudes.append((sim, cap))
-
-    similitudes.sort(key=lambda x: x[0], reverse=True)
-
-    return [cap for _, cap in similitudes[:top_k]]
-
-def _ollama_chat(model, messages):
-    """Llama a la API de Ollama para chat."""
-    data = json.dumps({"model": model, "messages": messages, "stream": False}).encode()
-    req = urllib.request.Request(
-        f"{OLLAMA_URL}/api/chat",
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())
-
-def busqueda_rag(query, capitulos):
-    """Combina búsqueda clásica y semántica para obtener contexto,
-    y usa un LLM a través de Ollama para generar una respuesta."""
-
-    ranking_semantico = obtener_capitulos_similares(query, capitulos, top_k=3)
-
-    tokens_q = set(_tokenizar(query))
-    ranking_clasico = []
-    for cap in capitulos:
-        score = sum(cap["frecuencias"].get(token, 0) for token in tokens_q)
-        if score > 0:
-            ranking_clasico.append((score, cap))
-    ranking_clasico.sort(key=lambda x: x[0], reverse=True)
-
-    capitulos_contexto = []
-    vistos = set()
-    for cap in ranking_semantico:
-        if cap["titulo"] not in vistos:
-            vistos.add(cap["titulo"])
-            capitulos_contexto.append(cap)
-    for _, cap in ranking_clasico[:3]:
-        if cap["titulo"] not in vistos:
-            vistos.add(cap["titulo"])
-            capitulos_contexto.append(cap)
-
-    if not capitulos_contexto:
+    except Exception:
         return None
 
-    contexto = "\n\n---\n\n".join(
-        f"[{cap['titulo']}]\n{cap['texto'][:900]}" for cap in capitulos_contexto
-    )
+def busqueda_rag(query, capitulos):
+    """Ejecuta búsqueda clásica y semántica y usa sus resultados como contexto para RAG."""
+
+    resultados_clasicos = busqueda_clasica(query, capitulos)
+    resultados_semanticos = busqueda_semantica(query, capitulos, top_k=3)
+
+    if not resultados_clasicos and not resultados_semanticos:
+        return None
+
+    capitulos_por_titulo = {cap["titulo"]: cap for cap in capitulos}
+
+    contexto_bloques = []
+    fuentes = []
+    vistos = set()
+
+    # Priorizamos los mejores resultados clásicos
+    for score, titulo, fragmento in resultados_clasicos[:3]:
+        if titulo in vistos:
+            continue
+        vistos.add(titulo)
+        fuentes.append(titulo)
+        contexto_bloques.append(
+            f"[CLASICA | {titulo} | score={score:.4f}]\n{fragmento}"
+        )
+
+    # Añadimos semántica para complementar el contexto
+    for porcentaje, titulo, fragmento in resultados_semanticos[:3]:
+        if titulo in vistos:
+            continue
+        vistos.add(titulo)
+        fuentes.append(titulo)
+
+        # Si el fragmento viene vacío por cualquier motivo, usamos el texto del capítulo.
+        if not fragmento and titulo in capitulos_por_titulo:
+            fragmento = capitulos_por_titulo[titulo]["texto"]
+
+        contexto_bloques.append(
+            f"[SEMANTICA | {titulo} | similitud={porcentaje:.1f}%]\n{str(fragmento)}"
+        )
+
+    if not contexto_bloques:
+        return None
+
+    contexto = "\n\n---\n\n".join(contexto_bloques)
     prompt = (
-        "Eres un experto en El Quijote. Responde en español usando solo los pasajes.\n"
-        "Si no está en los pasajes, dilo claramente.\n"
-        "Al final añade 'Fuentes:' con los títulos usados.\n\n"
-        f"PASAJES:\n{contexto}\n\n"
-        f"PREGUNTA: {query}\n\nRESPUESTA:"
+        "Eres un experto en el texto de El Quijote de Miguel de Cervantes.\n" 
+        "Responde a la consulta del usuario usando estrictamente el contexto recuperado.\n"
+        "El contexto incluye fragmentos de resultados de búsqueda clásica y semántica.\n"
+        "Si la respuesta no está respaldada por el contexto, indícalo claramente.\n"
+        "Incluye citas directas o fragmentos textuales exactos del contexto para justificar tu respuesta, indicando de qué capítulo provienen.\n"
+        "Al final añade 'Fuentes:' con los títulos de los capítulos usados del contexto.\n\n"
+        f"CONTEXTO:\n{contexto}\n\nCONSULTA: {query}"
     )
 
-    respuesta = _ollama_chat(
-        model=MODELO_LLM,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    texto_respuesta = respuesta.get("message", {}).get("content")
+    texto_respuesta = ollama_chat(prompt)
     if not texto_respuesta:
         raise RuntimeError("Ollama no devolvió una respuesta válida para RAG.")
+
+    # Si el modelo no incluyó fuentes, las añadimos para garantizar trazabilidad.
+    if "fuentes:" not in texto_respuesta.lower():
+        texto_respuesta = f"{texto_respuesta}\n\nFuentes: {', '.join(fuentes)}"
 
     return texto_respuesta

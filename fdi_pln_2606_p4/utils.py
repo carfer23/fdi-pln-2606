@@ -2,8 +2,10 @@ from bs4 import BeautifulSoup
 import spacy
 import math
 
+from config import SPACY_MODEL
+
 # Cargar modelo de spaCy
-nlp = spacy.load("es_core_news_sm")
+nlp = spacy.load(SPACY_MODEL)
 
 # Configuración para división de texto en chunks
 # CHUNK_SIZE = 2000  # caracteres por chunk
@@ -55,10 +57,13 @@ def separar_capitulos():
 
                 while nodo and nodo.name != "h3":
                     if nodo.name == "p":
-                        texto.append(nodo.get_text(" ", strip=True))
+                        # Extraer texto del párrafo eliminando saltos de línea internos
+                        parrafo_limpio = " ".join(nodo.get_text(" ", strip=True).split())
+                        if parrafo_limpio:
+                            texto.append(parrafo_limpio)
                     nodo = nodo.find_next_sibling()
 
-                texto_completo = " ".join(texto)
+                texto_completo = "\n\n".join(texto)
                 
                 # Procesamos y extraemos posiciones y frecuencias de los lemas
                 lemas, posiciones, frecuencias = procesar_texto_capitulo(texto_completo)
@@ -93,3 +98,7 @@ def similitud_coseno(a, b):
     if norm_a == 0 or norm_b == 0:
         return 0.0
     return dot / (norm_a * norm_b)
+
+def similitud_coseno_spacy(a, b):
+    """Calcula la similitud coseno entre dos vectores con spaCy."""
+    return a.similarity(b)

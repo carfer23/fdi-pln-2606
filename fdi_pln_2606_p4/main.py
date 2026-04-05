@@ -1,10 +1,7 @@
 import json
 import os
-import urllib.request
-
-# # Textual no renderiza bien si TERM llega como "dumb".
-# if os.environ.get("TERM", "").lower() in {"", "dumb"}:
-#     os.environ["TERM"] = "xterm-256color"
+import numpy as np
+import asyncio
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
@@ -14,40 +11,15 @@ from utils import separar_capitulos
 from busqueda_clasica import busqueda_clasica
 from busqueda_semantica import busqueda_semantica, generar_embeddings
 from busqueda_rag import busqueda_rag
-
-OLLAMA_URL = "http://localhost:11434"
-CACHE_FILE = "embeddings_cache.json"
-
-QUIJOTE_ASCII = r"""
-                  /\       ,,                                        ./
-          .---.   ||      /||                                       //
-       --'-----`--||    .'  \                                      //
-         {{{N `(  ||  .'    @                                     //
-         {{{` _/  ||.'    |  \                        _________ _//
-         {{{.-.   ||  /  /\   \                        "-------(_)
-          {( )| .'||    /  `.  \                               | \\
-__        {|\ \'  / )  /     \\O|                              |_|\ \
-  `-.____.-| \ \ /\/  /       `'                               |_| \
- -     ////|  \ Y /| |                                         [ ]  \
-   |   |||||`-|\^/|| |                                         F-J   `\
-       |||||`-| " [] /                                        J.-'L
-     _ \\\\/`-|   []|\                                        ]`-.[
- ) |`---``| _ |__([]| \                                       |.-'|
-  /       |/ `|   FJ|\ \                                      [`-.]
- /        `|  |   FJ) \ \                                     F.-'J
-/          |  |   FJ|  \ )                                   J`-._ L
-|          |  F  J  L  ||                                    ]    >[
-`.         )-(> '----` ||                                    | .-' |
-`.\        | |    |||  ||                                    [<    ]
-| \\       |-|    ||| / |                                    F `-. J
- \ )\    *_)/`-.__|| \\ |                                   J     ` L
-"""
+from config import EMBEDDINGS_CACHE_FILE
+from ascii_art import QUIJOTE_ASCII
 
 
 def _ollama_disponible():
     try:
-        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=2):
-            return True
+        import ollama
+        ollama.list()
+        return True
     except Exception:
         return False
 
@@ -62,54 +34,85 @@ class BuscadorQuijote(App):
     .logo { text-align: center; color: goldenrod; margin: 1; }
     """
 
+    app_lista = False # Flag para silenciar eventos tempranos antes de terminar la carga
+
     def on_mount(self):
         self.query_one("#busqueda").focus()
         self.run_worker(self.inicializar_datos())
+
+    def mostrar_instrucciones(self, mensaje_extra=""):
+        """Muestra las instrucciones de uso en el panel principal."""
+        contenedor = self.query_one("#resultados")
+        contenedor.remove_children()
+        
+        contenido = "✅ [b]Sistema listo para buscar[/b]\n\n"
+        if mensaje_extra:
+            contenido += f"{mensaje_extra}\n\n"
+            
+        contenido += "💡 [i]Instrucciones de uso:[/i]\n"
+        contenido += " 1. Selecciona el modo de búsqueda en el menú superior.\n"
+        contenido += " 2. Escribe tu consulta en la barra inferior y presiona Enter.\n"
+        contenido += " 3. La respuesta se mostrará en este panel."
+        
+        contenedor.mount(Static(contenido, classes="resultado-item"))
 
     async def inicializar_datos(self):
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
 
-        self.capitulos = separar_capitulos()
-        self.embeddings_listos = False
+        contenedor.mount(Static("📖 Cargando y procesando los capítulos de El Quijote..."))
+        await asyncio.sleep(0.1)
 
-        if not self.capitulos:
-            contenedor.remove_children()
-            contenedor.mount(Static("❌ No se pudo leer el texto de El Quijote."))
+        try:
+            self.capitulos = separar_capitulos()
+        except Exception as e:
+            contenedor.mount(Static(f"❌ Error: No se pudo leer el texto de El Quijote.\n{e}"))
             return
 
-        if os.path.exists(CACHE_FILE):
+        if not self.capitulos:
+            contenedor.mount(Static("❌ Error: No se encontraron capítulos de El Quijote."))
+            return
+
+        self.embeddings_listos = False
+        contenedor.mount(Static("🔍 Verificando estado de caché de los embeddings..."))
+        await asyncio.sleep(0.1)
+
+        if os.path.exists(EMBEDDINGS_CACHE_FILE):
             try:
-                with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    embeddings = json.load(f)
-
-                if len(embeddings) == len(self.capitulos):
-                    for cap, emb in zip(self.capitulos, embeddings):
-                        cap["embedding"] = emb
+                with open(EMBEDDINGS_CACHE_FILE, "r", encoding="utf-8") as f:
+                    embeddings_cache = json.load(f)
+                if len(embeddings_cache) == len(self.capitulos):
+                    for cap, emb in zip(self.capitulos, embeddings_cache):
+                        cap["embedding"] = np.array(emb)
                     self.embeddings_listos = True
-                    contenedor.mount(Static("📂 Embeddings cargados desde caché."))
-                else:
-                    contenedor.mount(
-                        Static("⚠️ Caché de embeddings desactualizada; se regenerará al usar modo semántico.")
-                    )
+                    contenedor.mount(Static("📂 Embeddings recuperados exitosamente desde la caché local."))
+                    await asyncio.sleep(0.5)
             except Exception:
-                contenedor.mount(Static("⚠️ No se pudo leer la caché; se regenerará al usar modo semántico."))
+                pass
 
-        contenedor.mount(Static("✅ Aplicación iniciada correctamente."))
+        if not self.embeddings_listos:
+            contenedor.mount(Static("⏳ Generando embeddings.."))
+            await asyncio.sleep(0.1) # Pausa breve para que se renderice el mensaje anterior
+            ok = await self.asegurar_embeddings()
+            if not ok:
+                return
+        
+        # Flujo de inicio completado
+        self.mostrar_instrucciones()
+        self.app_lista = True
 
     async def asegurar_embeddings(self):
-        """Genera o carga los embeddings necesarios para la búsqueda semántica. Devuelve True si están listos."""
+        """Genera los embeddings necesarios para la búsqueda semántica. Devuelve True si están listos."""
         if self.embeddings_listos:
             return True
 
         contenedor = self.query_one("#resultados")
-        contenedor.mount(Static("🤖 Generando embeddings con spaCy..."))
 
         try:
             embeddings = generar_embeddings(self.capitulos)
 
-            with open(CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(embeddings, f)
+            with open(EMBEDDINGS_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump([emb.tolist() for emb in embeddings], f)
 
             self.embeddings_listos = True
             return True
@@ -130,11 +133,29 @@ class BuscadorQuijote(App):
                 value="clasica",
                 id="modo",
             ),
+            Button("Regenerar embeddings", id="btn_regenerar", variant="warning"),
             Button("Salir", id="btn_salir", variant="error"),
             id="controles",
         )
         yield Input(placeholder="Introducir consulta...", id="busqueda")
         yield VerticalScroll(id="resultados")
+
+    def on_select_changed(self, event: Select.Changed):
+        """Limpia los resultados y la búsqueda al cambiar el modo de operación."""
+        # Evitar durante la inicialización o re-renderizado
+        if not getattr(self, "app_lista", False):
+            return
+
+        if event.select.id == "modo":
+            # Borrar la consulta actual
+            input_busqueda = self.query_one("#busqueda")
+            input_busqueda.value = ""
+            
+            # Limpiar el panel de resultados y mostrar de nuevo las instrucciones
+            self.mostrar_instrucciones()
+            
+            # Devolver el foco al input
+            input_busqueda.focus()
 
     async def on_input_submitted(self, event: Input.Submitted):
         query = event.value.strip()
@@ -187,7 +208,7 @@ class BuscadorQuijote(App):
 
             elif modo == "rag":
                 if not _ollama_disponible():
-                    contenedor.mount(Static("❌ Ollama no está activo en localhost:11434. Necesario para RAG."))
+                    contenedor.mount(Static("❌ Ollama no está iniciado. Necesario para RAG."))
                     return
                 
                 ok = await self.asegurar_embeddings()
@@ -213,9 +234,25 @@ class BuscadorQuijote(App):
             contenedor.mount(Static(f"[b red]Error:[/b red] {e}"))
 
     def on_button_pressed(self, event: Button.Pressed):
-        """Botón para salir de la aplicación."""
+        """Maneja las pulsaciones de los botones de la interfaz."""
         if event.button.id == "btn_salir":
             self.exit()
+        elif event.button.id == "btn_regenerar":
+            self.run_worker(self.regenerar_embeddings())
+
+    async def regenerar_embeddings(self):
+        """Fuerza la regeneración de embeddings sobrescribiendo el archivo cache."""
+        contenedor = self.query_one("#resultados")
+        contenedor.remove_children()
+        contenedor.mount(Static("⏳ Regenerando los embeddings forzosamente... por favor, espera."))
+        await asyncio.sleep(0.1) # Pausa breve para que se renderice el mensaje anterior
+
+        # Desactivamos el flag para asegurar que se llamen de nuevo
+        self.embeddings_listos = False
+        
+        ok = await self.asegurar_embeddings()
+        if ok:
+            self.mostrar_instrucciones("[green]✅ Embeddings regenerados y guardados con éxito.[/green]")
 
 
 if __name__ == "__main__":
