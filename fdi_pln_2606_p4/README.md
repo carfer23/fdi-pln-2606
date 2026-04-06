@@ -1,5 +1,9 @@
 # Práctica 4 - Buscador Interactivo de El Quijote
 
+## Integrantes
+- Carmen Fernández González
+- Yushan Yang Xu
+
 ## Descripción
 
 En esta práctica se implementa un motor de búsqueda avanzado e interactivo sobre el _corpus_ de la novela *Don Quijote de la Mancha*. 
@@ -9,6 +13,8 @@ El objetivo principal de este proyecto es aplicar técnicas modernas de recupera
 1. **Preprocesamiento del texto:** El documento HTML original se procesa por capítulos y se divide en fragmentos de texto (*chunks* de 2000 caracteres con 200 caracteres de solapamiento). Durante la indexación, se eliminan las palabras vacías (*stop words*) y se lematizan los términos utilizando `spaCy`.
 2. **Interfaz de Usuario en Terminal (TUI):** Se ha construido una interfaz interactiva utilizando `textual`. Esta interfaz permite a los usuarios escribir consultas, escoger visualmente el motor de búsqueda y recibir los resultados enriquecidos con puntuaciones matemáticas (score TF-IDF o similitud coseno) y palabras clave resaltadas.
 3. **Múltiples motores de resolución:** La herramienta integra metodologías distintas para encontrar la información, adaptándose a aproximaciones léxicas, semánticas y generativas.
+
+Se ha elegido el modelo `es_core_news_md` frente a `es_core_news_sm` porque incluye embeddings preentrenados, algo de lo que carece la versión reducida (`sm`). Esto es fundamental para la **Búsqueda semántica**, ya que permite una representación y similitud de embeddings mucho más precisa en las consultas y fragmentos de texto, obteniendo mejores resultados de búsqueda.
 
 ### Modos de operación
 
@@ -31,6 +37,14 @@ OLLAMA_MODEL=llama3.2:1b
 CACHE_FILE=embeddings_cache.json
 ```
 
+## Ejecución
+
+Instalar el wheel y ejecutarlo con los siguientes comandos:
+```
+uv tool install <ruta al wheel>
+uv run fdi-pln-2606-p4
+```
+
 ### Ollama para el modo de operación RAG
 La documentación e instalación completa de Ollama puede encontrarse [aquí](https://ollama.com/). Para instalarlo, se pueden seguir los siguientes pasos:
 ```
@@ -43,11 +57,3 @@ Para iniciar Ollama, se utiliza el siguiente comando:
 ./bin/ollama serve
 ```
 Es necesario iniciar Ollama en una terminal para poder ejecutar el **Modo RAG**.
-
-## Ejecución
-
-Instalar el wheel y ejecutarlo con los siguientes comandos:
-```
-uv tool install <ruta al wheel>
-uv run fdi-pln-2606-p4
-```

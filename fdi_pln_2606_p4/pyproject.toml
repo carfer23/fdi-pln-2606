@@ -1,19 +1,28 @@
 [project]
-name = "p4"
+name = "fdi-pln-2606-p4"
 version = "0.1.0"
-description = "Add your description here"
+description = "Práctica 4"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "bs4>=0.0.2",
-    "es-core-news-sm",
     "spacy>=3.8.11",
     "textual>=8.1.1",
     "ollama>=0.4.0",
     "python-dotenv>=1.2.2",
-    "es-core-news-md",
+    "es-core-news-md @ https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.8.0/es_core_news_md-3.8.0-py3-none-any.whl"
 ]
 
 [tool.uv.sources]
-es-core-news-sm = { url = "https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.8.0/es_core_news_sm-3.8.0-py3-none-any.whl" }
 es-core-news-md = { url = "https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.8.0/es_core_news_md-3.8.0-py3-none-any.whl" }
+
+[build-system]
+requires = ["uv_build>=0.11.3,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "src"
+module-root = ""
+
+[project.scripts]
+fdi-pln-2606-p4 = "src.main:main"

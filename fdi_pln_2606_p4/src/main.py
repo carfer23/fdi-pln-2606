@@ -13,17 +13,21 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Button, Input, Select, Static
 
-from utils import separar_capitulos
-from busqueda_clasica import busqueda_clasica
-from busqueda_semantica import busqueda_semantica, generar_embeddings
-from busqueda_rag import busqueda_rag
-from config import EMBEDDINGS_CACHE_FILE
-from ascii_art import QUIJOTE_ASCII
+from src.utils import separar_capitulos
+from src.busqueda_clasica import busqueda_clasica
+from src.busqueda_semantica import (
+    busqueda_semantica,
+    generar_embeddings,
+)
+from src.busqueda_rag import busqueda_rag
+from src.config import EMBEDDINGS_CACHE_FILE
+from src.ascii_art import QUIJOTE_ASCII
 
 
 def _ollama_disponible():
     try:
         import ollama
+
         ollama.list()
         return True
     except Exception:
@@ -57,7 +61,7 @@ class BuscadorQuijote(App):
 
     def compose(self) -> ComposeResult:
         """Construye la jerarquía de componentes de la interfaz de usuario."""
-        #yield Static(QUIJOTE_ASCII, classes="logo")
+        # yield Static(QUIJOTE_ASCII, classes="logo")
         yield Horizontal(
             Select(
                 [
@@ -89,17 +93,23 @@ class BuscadorQuijote(App):
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
 
-        contenedor.mount(Static("📖 Cargando y procesando los capítulos de El Quijote..."))
+        contenedor.mount(
+            Static("📖 Cargando y procesando los capítulos de El Quijote...")
+        )
         await asyncio.sleep(0.1)
 
         try:
             self.capitulos = separar_capitulos()
         except Exception as e:
-            contenedor.mount(Static(f"❌ Error: No se pudo leer el texto de El Quijote.\n{e}"))
+            contenedor.mount(
+                Static(f"❌ Error: No se pudo leer el texto de El Quijote.\n{e}")
+            )
             return
 
         if not self.capitulos:
-            contenedor.mount(Static("❌ Error: No se encontraron capítulos de El Quijote."))
+            contenedor.mount(
+                Static("❌ Error: No se encontraron capítulos de El Quijote.")
+            )
             return
 
         self.embeddings_listos = False
@@ -114,18 +124,24 @@ class BuscadorQuijote(App):
                     for cap, emb in zip(self.capitulos, embeddings_cache):
                         cap["embedding"] = np.array(emb)
                     self.embeddings_listos = True
-                    contenedor.mount(Static("📂 Embeddings recuperados exitosamente desde la caché local."))
+                    contenedor.mount(
+                        Static(
+                            "📂 Embeddings recuperados exitosamente desde la caché local."
+                        )
+                    )
                     await asyncio.sleep(0.5)
             except Exception:
                 pass
 
         if not self.embeddings_listos:
             contenedor.mount(Static("⏳ Generando embeddings.."))
-            await asyncio.sleep(0.1) # Pausa breve para que se renderice el mensaje anterior
+            await asyncio.sleep(
+                0.1
+            )  # Pausa breve para que se renderice el mensaje anterior
             ok = await self.asegurar_embeddings()
             if not ok:
                 return
-        
+
         # Flujo de inicio completado
         self.mostrar_instrucciones()
         self.app_lista = True
@@ -148,20 +164,26 @@ class BuscadorQuijote(App):
         except Exception as e:
             contenedor.mount(Static(f"❌ Error generando embeddings: {e}"))
             return False
-        
+
     async def regenerar_embeddings(self):
         """Fuerza la regeneración de embeddings sobrescribiendo el archivo cache."""
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
-        contenedor.mount(Static("⏳ Regenerando los embeddings forzosamente... por favor, espera."))
-        await asyncio.sleep(0.1) # Pausa breve para que se renderice el mensaje anterior
+        contenedor.mount(
+            Static("⏳ Regenerando los embeddings forzosamente... por favor, espera.")
+        )
+        await asyncio.sleep(
+            0.1
+        )  # Pausa breve para que se renderice el mensaje anterior
 
         # Desactivamos el flag para asegurar que se llamen de nuevo
         self.embeddings_listos = False
-        
+
         ok = await self.asegurar_embeddings()
         if ok:
-            self.mostrar_instrucciones("[green]✅ Embeddings regenerados y guardados con éxito.[/green]")
+            self.mostrar_instrucciones(
+                "[green]✅ Embeddings regenerados y guardados con éxito.[/green]"
+            )
 
     # ============================================
     # MANEJO DE EVENTOS DE INTERFAZ E INTERACCIÓN
@@ -171,16 +193,16 @@ class BuscadorQuijote(App):
         """Muestra las instrucciones de uso en el panel principal."""
         contenedor = self.query_one("#resultados")
         contenedor.remove_children()
-        
+
         contenido = "✅ [b]Sistema listo para buscar[/b]\n\n"
         if mensaje_extra:
             contenido += f"{mensaje_extra}\n\n"
-            
+
         contenido += "💡 [i]Instrucciones de uso:[/i]\n"
         contenido += " 1. Selecciona el modo de búsqueda en el menú superior.\n"
         contenido += " 2. Escribe tu consulta en la barra inferior y presiona Enter.\n"
         contenido += " 3. La respuesta se mostrará en este panel."
-        
+
         contenedor.mount(Static(contenido, classes="resultado-item"))
 
         # Mostrar ASCII art
@@ -196,10 +218,10 @@ class BuscadorQuijote(App):
             # Borrar la consulta actual
             input_busqueda = self.query_one("#busqueda")
             input_busqueda.value = ""
-            
+
             # Limpiar el panel de resultados y mostrar de nuevo las instrucciones
             self.mostrar_instrucciones()
-            
+
             # Devolver el foco al input
             input_busqueda.focus()
 
@@ -226,7 +248,7 @@ class BuscadorQuijote(App):
     async def procesar_busqueda(self, query, modo):
         """
         Procesa la consulta del usuario según el modo seleccionado y muestra los resultados.
-        
+
         :param query: La consulta ingresada por el usuario.
         :param modo: El modo de búsqueda seleccionado ("clasica", "semantica" o "rag").
         """
@@ -255,11 +277,11 @@ class BuscadorQuijote(App):
 
                 # Busqueda semántica
                 resultados_sem = busqueda_semantica(query, self.capitulos)
-                
+
                 if not resultados_sem:
                     contenedor.mount(Static("No se encontraron resultados."))
                     return
-                
+
                 # Se muestra el título y fragmento de cada resultado
                 for porcentaje, titulo, fragmento in resultados_sem:
                     texto_final = f"[b yellow]{titulo}[/b yellow] (Similitud: {porcentaje:.1f}%)\n\n{fragmento}"
@@ -268,9 +290,11 @@ class BuscadorQuijote(App):
 
             elif modo == "rag":
                 if not _ollama_disponible():
-                    contenedor.mount(Static("❌ Ollama no está iniciado. Necesario para RAG."))
+                    contenedor.mount(
+                        Static("❌ Ollama no está iniciado. Necesario para RAG.")
+                    )
                     return
-                
+
                 ok = await self.asegurar_embeddings()
                 if not ok:
                     return
@@ -294,5 +318,9 @@ class BuscadorQuijote(App):
             contenedor.mount(Static(f"[b red]Error:[/b red] {e}"))
 
 
-if __name__ == "__main__":
+def main():
     BuscadorQuijote().run()
+
+
+if __name__ == "__main__":
+    main()

@@ -10,13 +10,14 @@ El algoritmo de búsqueda sigue este proceso:
 5. Ordena todos los resultados por su puntuación final (score) de mayor a menor relevancia.
 """
 
-from utils import tokenizar_query
+from src.utils import tokenizar_query
 import math
+
 
 def busqueda_clasica(query, capitulos):
     """
     Busca la palabra (o palabras) en los capítulos. Devuelve una lista de tuplas (score, título, fragmento).
-    
+
     :param query: La consulta ingresada por el usuario.
     :param capitulos: La lista de capítulos procesados con lemas, posiciones y frecuencias.
     :return: Lista de tuplas (score, título, fragmento) ordenada por relevancia.
@@ -26,7 +27,7 @@ def busqueda_clasica(query, capitulos):
 
     if not palabras_busqueda:
         return []
-    
+
     # Calcular IDF para cada término de búsqueda
     N = len(capitulos)
     idf = {}
@@ -35,9 +36,9 @@ def busqueda_clasica(query, capitulos):
         idf[lema] = math.log(N / df) if df > 0 else 0
 
     for cap in capitulos:
-        # Intersección de conjuntos. 
+        # Intersección de conjuntos
         lemas_encontrados = palabras_busqueda & cap.get("lemas", set())
-        
+
         if lemas_encontrados:
             # Calcular TF-IDF para el capítulo
             score = 0
@@ -50,17 +51,17 @@ def busqueda_clasica(query, capitulos):
                 elif tf is None:
                     tf = 1
                 score += tf * idf[lema]
-            
+
             lema_pivote = list(lemas_encontrados)[0]
             idx_inicio, idx_fin = cap["posiciones"][lema_pivote][0]
-            
+
             # Se muestra un fragmento de texto alrededor de la primera aparición del lema encontrado
             ventana = 150
             inicio_contexto = max(0, idx_inicio - ventana)
             fin_contexto = min(len(cap["texto"]), idx_fin + ventana)
-            
+
             fragmento_resaltado = cap["texto"][inicio_contexto:fin_contexto]
-            
+
             # Recopilar las palabras exactas que aparecen en este fragmento (sin duplicados) para resaltarlas
             palabras_a_resaltar = set()
             for lema in lemas_encontrados:
@@ -71,25 +72,26 @@ def busqueda_clasica(query, capitulos):
 
             # Ordenar las palabras de mayor a menor longitud
             # Evita que al reemplazar "viento" rompamos "vientos"
-            palabras_a_resaltar = sorted(list(palabras_a_resaltar), key=len, reverse=True)
+            palabras_a_resaltar = sorted(
+                list(palabras_a_resaltar), key=len, reverse=True
+            )
 
             # Resaltar cada palabra encontrada en el fragmento en color verde
             for palabra_original in palabras_a_resaltar:
                 fragmento_resaltado = fragmento_resaltado.replace(
-                    palabra_original, 
-                    f"[b green]{palabra_original}[/b green]"
+                    palabra_original, f"[b green]{palabra_original}[/b green]"
                 )
 
             # Agregar "..." si el fragmento no muestra el inicio o el final del capítulo
             prefijo = "..." if inicio_contexto > 0 else ""
             sufijo = "..." if fin_contexto < len(cap["texto"]) else ""
-            
+
             # Construir el texto final con los fragmentos resaltados y los "..."
             texto_final = f"{prefijo}{fragmento_resaltado}{sufijo}"
-            
+
             # Agregar el resultado a la lista de resultados
             resultados.append((score, cap["titulo"], texto_final))
-            
+
     # Ordenar por relevancia TF-IDF
     resultados.sort(key=lambda x: x[0], reverse=True)
 

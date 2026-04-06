@@ -1,28 +1,29 @@
 """
 Este módulo implementa un sistema de RAG (Retrieval-Augmented Generation).
-Combina los resultados de los motores de búsqueda clásica y semántica para generar respuestas 
+Combina los resultados de los motores de búsqueda clásica y semántica para generar respuestas
 en lenguaje natural usando un modelo de lenguaje (LLM).
 
 El proceso de búsqueda y generación es el siguiente:
 1. Ejecuta la consulta del usuario en los sistemas de búsqueda clásica y semántica (embeddings).
 2. Selecciona y filtra los mejores resultados de ambas búsquedas, asegurando variedad para no repetir capítulos.
 3. Construye un contexto inyectando los fragmentos recuperados.
-4. Elabora un prompt con directrices estrictas para que el LLM actúe como experto, 
+4. Elabora un prompt con directrices estrictas para que el LLM actúe como experto,
    respondiendo únicamente basándose en el contexto dado.
 5. Llama a un LLM local (Ollama) para generar la respuesta.
 6. Garantiza que la respuesta contenga las fuentes estructuradas para dar trazabilidad a la información.
 """
 
 import ollama
-from busqueda_clasica import busqueda_clasica
-from busqueda_semantica import busqueda_semantica
+from src.busqueda_clasica import busqueda_clasica
+from src.busqueda_semantica import busqueda_semantica
 
-from config import OLLAMA_MODEL
-    
+from src.config import OLLAMA_MODEL
+
+
 def ollama_chat(prompt: str, system_prompt: str = "") -> str | None:
     """
     Consulta a un modelo de lenguaje de Ollama.
-    
+
     :param prompt: El mensaje de usuario para el modelo.
     :param system_prompt: Instrucciones para el modelo (opcional).
     :return: La respuesta generada por el modelo, o None si hubo un error.
@@ -33,7 +34,7 @@ def ollama_chat(prompt: str, system_prompt: str = "") -> str | None:
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
-            ]
+            ],
         )
         content = response["message"]["content"]
 
@@ -42,10 +43,11 @@ def ollama_chat(prompt: str, system_prompt: str = "") -> str | None:
     except Exception:
         return None
 
+
 def busqueda_rag(query, capitulos):
     """
     Ejecuta búsqueda clásica y semántica y usa sus resultados como contexto para RAG.
-    
+
     :param query: La consulta del usuario.
     :param capitulos: Lista de diccionarios con información de cada capítulo, incluyendo embeddings
     :return: Respuesta generada por el modelo de lenguaje usando RAG, o None si no se pudo generar.
@@ -92,7 +94,7 @@ def busqueda_rag(query, capitulos):
 
     contexto = "\n\n---\n\n".join(contexto_bloques)
     prompt = (
-        "Eres un experto en el texto de El Quijote de Miguel de Cervantes.\n" 
+        "Eres un experto en el texto de El Quijote de Miguel de Cervantes.\n"
         "Responde a la consulta del usuario usando estrictamente el contexto recuperado.\n"
         "El contexto incluye fragmentos de resultados de búsqueda clásica y semántica.\n"
         "Si la respuesta no está respaldada por el contexto, indícalo claramente.\n"
