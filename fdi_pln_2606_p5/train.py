@@ -2,6 +2,7 @@
 
 import time
 
+import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -77,20 +78,40 @@ def _run_epoch(model, dataloader, optimizer=None, label=""):
     return total_loss / n
 
 
+def _plot_losses(train_losses, val_losses, path="loss.png"):
+    epochs = range(1, len(train_losses) + 1)
+    plt.figure(figsize=(8, 5))
+    plt.plot(epochs, train_losses, marker="o", label="Train loss")
+    plt.plot(epochs, val_losses,   marker="o", label="Val loss")
+    plt.xlabel("Época")
+    plt.ylabel("Loss")
+    plt.title("Train vs Val Loss")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+    print(f"Gráfica guardada en {path}")
+
+
 def train(model, tokens, epochs=5, context_size=128, batch_size=64, lr=3e-4, train_ratio=0.9):
     """Entrena el modelo de lenguaje causal sobre los tokens dados."""
     train_dl, val_dl = _make_dataloaders(tokens, context_size, batch_size, train_ratio)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
+    train_losses, val_losses = [], []
     t0 = time.time()
     for epoch in range(epochs):
         print(f"\nEpoca {epoch + 1}/{epochs}")
         train_loss = _run_epoch(model, train_dl, optimizer, label="train")
         val_loss = _run_epoch(model, val_dl, None, label="val  ")
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
         elapsed = time.time() - t0
         print(f"Epoca {epoch + 1}/{epochs} | train={train_loss:.4f} | val={val_loss:.4f} | tiempo={elapsed:.1f}s")
 
     print(f"Entrenamiento finalizado en {time.time() - t0:.1f}s")
+    _plot_losses(train_losses, val_losses)
 
 
 if __name__ == "__main__":
