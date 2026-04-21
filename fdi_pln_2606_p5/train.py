@@ -1,6 +1,5 @@
 """Entrenamiento del LLM causal sobre un corpus de textos."""
 
-import sys
 import time
 
 import torch
@@ -97,18 +96,30 @@ def train(model, tokens, epochs=5, context_size=128, batch_size=64, lr=3e-4, tra
 if __name__ == "__main__":
     import argparse
 
+    # Hiperparámetros por defecto — edita aquí para cambiarlos sin pasar argumentos
+    D_MODEL    = 128
+    N_HEADS    = 4
+    N_LAYERS   = 4
+    SEQ_LEN    = 128
+    EXPANSION  = 4
+    DROPOUT    = 0.1
+    VOCAB_SIZE = 300
+    EPOCHS     = 5
+    BATCH_SIZE = 40
+    LR         = 3e-4
+
     parser = argparse.ArgumentParser(description="Entrenar un LLM causal pequeño")
     parser.add_argument("corpus", nargs="?", default="resources", help="Directorio con .txt")
-    parser.add_argument("--d_model",    type=int,   default=128,  help="Dimensión interna del transformer")
-    parser.add_argument("--n_heads",    type=int,   default=4,    help="Número de cabezas de atención")
-    parser.add_argument("--n_layers",   type=int,   default=4,    help="Número de bloques transformer")
-    parser.add_argument("--seq_len",    type=int,   default=128,  help="Longitud máxima de secuencia")
-    parser.add_argument("--expansion",  type=int,   default=4,    help="Factor de expansión del feedforward")
-    parser.add_argument("--dropout",    type=float, default=0.1,  help="Tasa de dropout")
-    parser.add_argument("--vocab_size", type=int,   default=300,  help="Tamaño del vocabulario BPE")
-    parser.add_argument("--epochs",     type=int,   default=5,    help="Número de épocas")
-    parser.add_argument("--batch_size", type=int,   default=40,   help="Tamaño de batch")
-    parser.add_argument("--lr",         type=float, default=3e-4, help="Tasa de aprendizaje")
+    parser.add_argument("--d_model",    type=int,   default=D_MODEL)
+    parser.add_argument("--n_heads",    type=int,   default=N_HEADS)
+    parser.add_argument("--n_layers",   type=int,   default=N_LAYERS)
+    parser.add_argument("--seq_len",    type=int,   default=SEQ_LEN)
+    parser.add_argument("--expansion",  type=int,   default=EXPANSION)
+    parser.add_argument("--dropout",    type=float, default=DROPOUT)
+    parser.add_argument("--vocab_size", type=int,   default=VOCAB_SIZE)
+    parser.add_argument("--epochs",     type=int,   default=EPOCHS)
+    parser.add_argument("--batch_size", type=int,   default=BATCH_SIZE)
+    parser.add_argument("--lr",         type=float, default=LR)
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -142,6 +153,13 @@ if __name__ == "__main__":
 
     train(model, tokens, epochs=args.epochs, context_size=args.seq_len, batch_size=args.batch_size, lr=args.lr)
 
+    # Generamos en CPU para evitar problemas con MPS/multinomial
+    model.to("cpu")
     prompt = "alice and the cat were studying for the exam. what "
-    pred = model.generate(tokenizer.encode(prompt), max_tokens=200)
-    print(f"\n{prompt}{tokenizer.decode(pred)[:500]}")
+    print("\n--- Texto generado ---")
+    try:
+        pred = model.generate(tokenizer.encode(prompt), max_tokens=200)
+        print(prompt + tokenizer.decode(pred)[:500])
+    except Exception as e:
+        print(f"Error al generar: {e}")
+    print("--- Fin ---", flush=True)

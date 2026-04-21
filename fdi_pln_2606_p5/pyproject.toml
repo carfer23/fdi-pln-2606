@@ -1,9 +1,18 @@
 [project]
-name = "fdi-pln-2606-p5"
+name = "practica-5"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "torch>=2.11.0",
+    "numpy>=2.4.4",
+    "torch",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
