@@ -174,6 +174,9 @@ if __name__ == "__main__":
 
     train(model, tokens, epochs=args.epochs, context_size=args.seq_len, batch_size=args.batch_size, lr=args.lr)
 
+    torch.save(model.state_dict(), "model.pth")
+    print("Pesos guardados en model.pth")
+
     # Generamos en CPU para evitar problemas con MPS/multinomial
     model.to("cpu")
     prompt = "alice and the cat were studying for the exam. what "
