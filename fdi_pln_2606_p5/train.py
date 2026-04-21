@@ -43,9 +43,10 @@ def _make_dataloaders(tokens, context_size, batch_size, train_ratio=0.9):
     )
 
 
-def _run_epoch(model, dataloader, optimizer=None):
+def _run_epoch(model, dataloader, optimizer=None, label=""):
     """Ejecuta una epoch de entrenamiento (con optimizer) o evaluación (sin él)."""
     total_loss, n = 0, 0
+    total = len(dataloader)
     device = next(model.parameters()).device
 
     if optimizer:
@@ -64,13 +65,16 @@ def _run_epoch(model, dataloader, optimizer=None):
 
         if optimizer:
             loss.backward()
-            # Clip para evitar gradientes explosivos
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
         total_loss += loss.item()
         n += 1
+        # Progreso cada 10% de los batches
+        if n % max(1, total // 10) == 0:
+            print(f"  {label} batch {n}/{total} | loss={total_loss/n:.4f}", end="\r")
 
+    print()  # salto de línea al terminar
     return total_loss / n
 
 
@@ -81,8 +85,9 @@ def train(model, tokens, epochs=5, context_size=128, batch_size=64, lr=3e-4, tra
 
     t0 = time.time()
     for epoch in range(epochs):
-        train_loss = _run_epoch(model, train_dl, optimizer)
-        val_loss = _run_epoch(model, val_dl, None)
+        print(f"\nEpoca {epoch + 1}/{epochs}")
+        train_loss = _run_epoch(model, train_dl, optimizer, label="train")
+        val_loss = _run_epoch(model, val_dl, None, label="val  ")
         elapsed = time.time() - t0
         print(f"Epoca {epoch + 1}/{epochs} | train={train_loss:.4f} | val={val_loss:.4f} | tiempo={elapsed:.1f}s")
 
@@ -90,32 +95,52 @@ def train(model, tokens, epochs=5, context_size=128, batch_size=64, lr=3e-4, tra
 
 
 if __name__ == "__main__":
-    corpus_path = sys.argv[1] if len(sys.argv) > 1 else "resources"
-    text = load_corpus(corpus_path)
+    import argparse
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Usando dispositivo: {device}")
+    parser = argparse.ArgumentParser(description="Entrenar un LLM causal pequeño")
+    parser.add_argument("corpus", nargs="?", default="resources", help="Directorio con .txt")
+    parser.add_argument("--d_model",    type=int,   default=128,  help="Dimensión interna del transformer")
+    parser.add_argument("--n_heads",    type=int,   default=4,    help="Número de cabezas de atención")
+    parser.add_argument("--n_layers",   type=int,   default=4,    help="Número de bloques transformer")
+    parser.add_argument("--seq_len",    type=int,   default=128,  help="Longitud máxima de secuencia")
+    parser.add_argument("--expansion",  type=int,   default=4,    help="Factor de expansión del feedforward")
+    parser.add_argument("--dropout",    type=float, default=0.1,  help="Tasa de dropout")
+    parser.add_argument("--vocab_size", type=int,   default=300,  help="Tamaño del vocabulario BPE")
+    parser.add_argument("--epochs",     type=int,   default=5,    help="Número de épocas")
+    parser.add_argument("--batch_size", type=int,   default=40,   help="Tamaño de batch")
+    parser.add_argument("--lr",         type=float, default=3e-4, help="Tasa de aprendizaje")
+    args = parser.parse_args()
 
-    VOCAB_SIZE = 300
-    CONTEXT_SIZE = 128
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"  # GPU Apple Silicon (M1/M2/M3)
+    else:
+        device = "cpu"
+    print(f"Dispositivo: {device}")
 
-    tokenizer = BPETokenizer(text, vocab_size=VOCAB_SIZE)
+    text = load_corpus(args.corpus)
+    tokenizer = BPETokenizer(text, vocab_size=args.vocab_size)
     tokens = tokenizer.encode(text)
     print(tokenizer)
+    print(f"\nHiperparámetros: d_model={args.d_model}, n_heads={args.n_heads}, n_layers={args.n_layers}, "
+          f"seq_len={args.seq_len}, expansion={args.expansion}, dropout={args.dropout}, "
+          f"vocab_size={args.vocab_size}, epochs={args.epochs}, batch_size={args.batch_size}")
 
     model = CausalLLM(
         vocab_size=tokenizer.vocab_size,
-        max_seq_len=CONTEXT_SIZE,
-        d_model=128,
-        n_heads=4,
-        n_layers=4,
-        dropout=0.1,
+        max_seq_len=args.seq_len,
+        d_model=args.d_model,
+        n_heads=args.n_heads,
+        n_layers=args.n_layers,
+        expansion=args.expansion,
+        dropout=args.dropout,
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters())
-    print(f"Parámetros del modelo: {n_params:,}")
+    print(f"Parámetros del modelo: {n_params:,}\n")
 
-    train(model, tokens, epochs=5, context_size=CONTEXT_SIZE)
+    train(model, tokens, epochs=args.epochs, context_size=args.seq_len, batch_size=args.batch_size, lr=args.lr)
 
     prompt = "alice and the cat were studying for the exam. what "
     pred = model.generate(tokenizer.encode(prompt), max_tokens=200)
