@@ -94,7 +94,7 @@ def _plot_losses(train_losses, val_losses, path="loss.png"):
     print(f"Gráfica guardada en {path}")
 
 
-def train(model, tokens, epochs=5, context_size=128, batch_size=64, lr=3e-4, train_ratio=0.9):
+def train(model, tokens, epochs=10, context_size=128, batch_size=64, lr=3e-4, train_ratio=0.9):
     """Entrena el modelo de lenguaje causal sobre los tokens dados."""
     train_dl, val_dl = _make_dataloaders(tokens, context_size, batch_size, train_ratio)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
