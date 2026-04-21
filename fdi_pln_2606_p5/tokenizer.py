@@ -76,8 +76,8 @@ class BPETokenizer():
         # Obtiene los tokens asociados a cada id
         text = [self.vocab[id] for id in ids]
 
-        # Concatena los tokens en un único string
-        return " ".join(text)
+        # Concatena los tokens directamente (BPE ya incluye los espacios como parte del token)
+        return "".join(text)
 
     def __repr__(self):
         pretty = [t.replace("\n", "\\n").replace(" ", "▁") for t in self.vocab]

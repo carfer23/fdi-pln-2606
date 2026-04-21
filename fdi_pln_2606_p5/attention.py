@@ -21,6 +21,7 @@ class Attention(nn.Module): # Un módulo de PyTorch es un modelo entrenable
         super().__init__()
 
         self.n_heads = n_heads # Número de cabezas de atención
+        self.head_dim = d_model // n_heads  # dimensión por cabezal
 
         # Matrices separadas
         # self.W_qs = [nn.Linear(d_model, d_model) for _ in range(n_heads)] # dimensión de entrada y de salida
