@@ -1,12 +1,12 @@
 [project]
-name = "practica-5"
+name = "fdi-pln-2606-p5"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "loguru>=0.7.3",
     "matplotlib>=3.9.0",
-    "numpy>=2.4.4",
     "torch",
 ]
 

@@ -15,7 +15,7 @@ En esta práctica se implementa un motor de búsqueda avanzado e interactivo sob
 
 Para más información, consultar el [README](./fdi_pln_2606_p4/README.md) expecífico de la Práctica 4.
 
-## Práctica 4
+## Práctica 5
 En esta práctica se implementa un "mini" LLM escribiendo el código de todos sus componentes, desde la tokenización hasta la producción final.
 
 Para más información, consultar el [README](./fdi_pln_2606_p5/README.md) expecífico de la Práctica 5.
