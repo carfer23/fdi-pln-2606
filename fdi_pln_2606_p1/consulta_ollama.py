@@ -1,38 +1,49 @@
 """Módulo que maneja la interacción con Ollama."""
 
-import ollama
+import re
 import json
+import ollama
 from pathlib import Path
 
-from .config import OLLAMA_MODEL
+if __package__:
+    from .config import OLLAMA_MODEL
+else:
+    from config import OLLAMA_MODEL
 
 P1_DIR = Path(__file__).resolve().parent
 
 
-def cargar_prompt(nombre_archivo, **kwargs):
-    """Carga un prompt."""
-    with open(f"{P1_DIR}/prompts/{nombre_archivo}.txt", "r", encoding="utf-8") as f:
-        plantilla = f.read()
-    return plantilla.format(**kwargs)
+def cargar_prompt(nombre_archivo: str, **kwargs) -> str:
+    """Carga y formatea un prompt desde archivo."""
+    path = P1_DIR / "prompts" / f"{nombre_archivo}.txt"
+    return path.read_text(encoding="utf-8").format(**kwargs)
 
 
-def clean_json_response(response_text):
-    """Limpia la respuesta del LLM para extraer solo el JSON válido."""
+def _extraer_json(text: str) -> dict:
+    """Extrae un objeto JSON del texto de respuesta del LLM."""
+    # Eliminar bloques de razonamiento interno de modelos tipo qwen3
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = text.replace("```json", "").replace("```", "").strip()
 
-    texto = response_text.replace("```json", "").replace("```", "").strip()
     try:
-        datos = json.loads(texto)
-        return datos
+        return json.loads(text)
     except json.JSONDecodeError:
-        print("❌ Error: El agente falló al generar un JSON válido.")
-        print(f"Respuesta cruda: {response_text}")
-        # Retornar una acción 'esperar' por defecto para que el bot no crashee
-        return {"accion": "esperar"}
+        pass
+
+    # Fallback: buscar el primer objeto JSON completo en el texto
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    print(f"❌ No se pudo extraer JSON válido. Respuesta:\n{text[:400]}")
+    return {"accion": "esperar"}
 
 
 def ollama_generate(prompt: str, system_prompt: str = "") -> dict:
-    """Consulta a Ollama y fuerza el retorno de un diccionario."""
-
+    """Consulta a Ollama y devuelve la decisión del agente como diccionario."""
     print("🤖 Pensando...")
     try:
         response = ollama.chat(
@@ -41,24 +52,15 @@ def ollama_generate(prompt: str, system_prompt: str = "") -> dict:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            # format='json',
-            # think=False,
-            options={
-                "temperature": 0.1
-            },  # Temperatura baja para ser más preciso con JSON
+            format="json",
+            options={"temperature": 0.1},
+            think=False,
         )
         content = response["message"]["content"]
-        cleaned_json = clean_json_response(content)
-
-        print(f"JSON de respuesta: {cleaned_json}")
-
-        return cleaned_json
-
-    except json.JSONDecodeError:
-        print("⚠️ Error: El modelo no devolvió un JSON válido.")
-        print(f"Respuesta cruda: {response['message']['content']}")
-        return None
+        result = _extraer_json(content)
+        print(f"📋 Decisión: {result.get('accion')} → {result.get('razonamiento', '')[:120]}")
+        return result
 
     except Exception as e:
         print(f"⚠️ Error Ollama: {e}")
-        return None
+        return {"accion": "esperar"}

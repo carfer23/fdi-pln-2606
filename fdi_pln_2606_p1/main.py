@@ -1,172 +1,150 @@
-"""Módulo principal."""
+"""Módulo principal del agente de trueque."""
 
 import time
-import random
 
-from .info import get_gente, calcular_estado, get_buzon
-from .acciones import register_agent, ejecutar_accion, borrar_carta
-from .consulta_ollama import ollama_generate, cargar_prompt
+if __package__:
+    from .info import get_state, get_gente
+    from .acciones import register_agent, enviar_carta, cargar_carta, borrar_carta, ejecutar_accion
+    from .consulta_ollama import ollama_generate, cargar_prompt
+    from .config import AGENT_NAME, URL_BASE, OLLAMA_MODEL
+else:
+    from info import get_state, get_gente
+    from acciones import register_agent, enviar_carta, cargar_carta, borrar_carta, ejecutar_accion
+    from consulta_ollama import ollama_generate, cargar_prompt
+    from config import AGENT_NAME, URL_BASE, OLLAMA_MODEL
 
-from .config import AGENT_NAME
-
-TIMEOUT_DIFUSION = (
-    10  # Tiempo en segundos para esperar antes de reenviar cartas de difusión
-)
+TIMEOUT_REDIFUSION = 15  # segundos de inactividad antes de reenviar difusión
+SYSTEM_PROMPT_FILE = "prompt_inicial"
 
 
-def fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial):
-    """
-    Fase 1: El agente envía cartas a otros usuarios para proponer intercambios.
-    """
+def _build_system_prompt() -> str:
+    return cargar_prompt(SYSTEM_PROMPT_FILE, alias=AGENT_NAME)
+
+
+def fase_difusion(faltantes: dict, sobrantes: dict, usuarios: list[str]) -> None:
+    """Envía propuestas de intercambio a todos los agentes disponibles."""
     print("\n--- 📨 FASE 1: Enviando cartas de difusión ---")
 
-    # Convertimos los dicts a listas para poder usar índices
-    lista_faltantes = list(faltantes.keys())
-    lista_sobrantes = list(sobrantes.keys())
-
-    # Si no nos falta nada, no iniciamos esta fase
-    if not lista_faltantes:
-        print("No faltan recursos. Saltando fase de difusión.")
+    if not faltantes:
+        print("No faltan recursos. Saltando difusión.")
+        return
+    if not sobrantes:
+        print("Sin sobrantes para ofrecer. No se puede proponer intercambio.")
         return
 
-    if len(usuarios) == 0:
-        print("No hay otros usuarios activos para enviar cartas.")
+    items_need = list(faltantes)
+    items_offer = list(sobrantes)
+    destinatarios = [u for u in usuarios if u != AGENT_NAME]
+
+    if not destinatarios:
+        print("No hay otros agentes disponibles.")
         return
 
-    for i, usuario in enumerate(usuarios):
-        if usuario == AGENT_NAME:
-            continue
+    for i, usuario in enumerate(destinatarios):
+        # Rotamos qué recursos pedimos/ofrecemos para diversificar propuestas
+        item_need = items_need[i % len(items_need)]
+        item_offer = items_offer[i % len(items_offer)]
 
-        print(f"Preparando carta para {usuario}...")
-
-        # 1. Seleccionamos aleatoriamente un recurso necesitado
-        item_need = random.choice(lista_faltantes)
-
-        # Pedimos solo una unidad para aumentar las probabilidades de aceptación
-        cant_a_pedir = 1
-
-        # 2. Alternamos el recurso ofrecido (si tenemos sobrantes)
-        if lista_sobrantes:
-            item_offer = random.choice(lista_sobrantes)
-
-            # Ofrecemos solo una unidad para no pedir demasiado a cambio
-            cant_a_ofrecer = 1
-
-            prompt = cargar_prompt(
-                "prompt_difusion",
-                usuario=usuario,
-                cant_a_pedir=cant_a_pedir,
-                item_need=item_need,
-                cant_a_ofrecer=cant_a_ofrecer,
-                item_offer=item_offer,
-            )
-
-            respuesta = ollama_generate(prompt, prompt_inicial)
-            ejecutar_accion(respuesta)
-            time.sleep(1)
+        cuerpo = cargar_carta(
+            "carta_difusion",
+            dest=usuario, alias=AGENT_NAME,
+            req_cant=1, req=item_need,
+            ofr_cant=1, ofr=item_offer,
+        )
+        enviar_carta(usuario, "Propuesta de intercambio", cuerpo)
+        time.sleep(0.5)
 
 
-def fase_reactiva(prompt_inicial, usuarios):
-    """
-    Fase 2: El agente reacciona a las cartas que llegan a su buzón.
-    Si pasa un tiempo determinado sin recibir nada, vuelve a enviar cartas.
-    """
-    print("\n--- 👁️ FASE 2: Esperando respuestas y paquetes ---")
+def _procesar_buzon(buzon: dict[str, dict], system_prompt: str) -> None:
+    """Procesa todas las cartas del buzón, refrescando el estado entre cada una."""
+    print(f"📫 {len(buzon)} mensajes en el buzón. Procesando...")
 
-    tiempo_ultima_accion = time.time()
-
-    # Bucle infinito para mantener al agente activo
-    while True:
-        faltantes, sobrantes = calcular_estado()
-
-        # Chequear si se ha cumplido el objetivo
-        if not faltantes:
-            print("🏆 ¡OBJETIVO CUMPLIDO! El agente ha conseguido todos los recursos.")
+    for carta_id, datos in buzon.items():
+        # Refrescamos el estado para reflejar paquetes ya enviados en este ciclo
+        state = get_state()
+        if state is None or not state["faltantes"]:
             break
 
-        print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
+        remitente = datos.get("remi", "desconocido")
+        asunto = datos.get("asunto", "")
+        print(f"\n📩 Carta de {remitente} [{asunto}]")
 
-        # Leer buzón
-        buzon = get_buzon()
+        prompt = cargar_prompt(
+            "prompt_procesar_carta",
+            usuario=remitente,
+            contenido=datos.get("cuerpo", ""),
+            asunto=asunto,
+            faltantes=state["faltantes"],
+            sobrantes=state["sobrantes"],
+        )
 
-        if not buzon:
-            print("💤 Buzón vacío. Esperando...")
+        accion = ollama_generate(prompt, system_prompt)
+        ejecutar_accion(accion)
+        borrar_carta(carta_id)
+        time.sleep(1)
 
-            tiempo_actual = time.time()
-            if (tiempo_actual - tiempo_ultima_accion) >= TIMEOUT_DIFUSION:
-                print(
-                    f"\n🔄 Han pasado {TIMEOUT_DIFUSION} segundos. Reenviando cartas de difusión..."
-                )
-                usuarios_actualizados = get_gente()
-                fase_difusion(
-                    faltantes, sobrantes, usuarios_actualizados, prompt_inicial
-                )
 
-                # Reiniciamos el temporizador después de enviar las cartas
-                tiempo_ultima_accion = time.time()
+def fase_reactiva(system_prompt: str, usuarios: list[str]) -> None:
+    """Bucle reactivo: procesa el buzón y reenvía difusión si hay inactividad."""
+    print("\n--- 👁️ FASE 2: Modo reactivo ---")
+    tiempo_ultima_accion = time.time()
 
+    while True:
+        state = get_state()
+
+        if state is None:
+            print("⚠️ Sin conexión al servidor. Reintentando en 5s...")
             time.sleep(5)
+            continue
 
+        print(f"\n📊 Faltantes: {state['faltantes']} | Sobrantes: {state['sobrantes']}")
+
+        if not state["faltantes"]:
+            print("🏆 ¡OBJETIVO CUMPLIDO! Todos los recursos conseguidos.")
+            break
+
+        if state["buzon"]:
+            _procesar_buzon(state["buzon"], system_prompt)
+            tiempo_ultima_accion = time.time()
         else:
-            print(f"📫 Tienes {len(buzon)} mensajes en el buzón. Procesando...")
-
-            # Extraer la primera carta
-            if isinstance(buzon, dict):
-                carta_id = next(iter(buzon))
-                datos = buzon[carta_id]
-
-                print(f"\nProcesando carta de {datos.get('remi')}...")
-
-                prompt = cargar_prompt(
-                    "prompt_procesar_carta",
-                    usuario=datos.get("remi"),
-                    contenido=datos.get("cuerpo"),
-                    asunto=datos.get("asunto"),
-                    faltantes=faltantes,
-                    sobrantes=sobrantes,
-                )
-
-                respuesta = ollama_generate(prompt, prompt_inicial)
-                ejecutar_accion(respuesta)
-
-                # Eliminar la carta procesada
-                borrar_carta(carta_id)
-
+            print("💤 Buzón vacío.")
+            if time.time() - tiempo_ultima_accion >= TIMEOUT_REDIFUSION:
+                print(f"🔄 {TIMEOUT_REDIFUSION}s sin actividad. Reenviando difusión...")
+                usuarios = get_gente()
+                fase_difusion(state["faltantes"], state["sobrantes"], usuarios)
                 tiempo_ultima_accion = time.time()
-                time.sleep(5)
-            else:
-                print("⚠️ Formato de buzón inesperado.")
+
+        time.sleep(5)
 
 
-def main():
-    """Función principal que orquesta el agente."""
-
+def main() -> None:
+    """Orquesta el ciclo de vida del agente."""
     print("🚀 Iniciando agente IA...")
+    if not URL_BASE:
+        print("❌ Falta FDI_PLN__BUTLER_ADDRESS en .env")
+        return
+    if not AGENT_NAME:
+        print("❌ Falta AGENT_NAME en .env")
+        return
+    if not OLLAMA_MODEL:
+        print("❌ Falta OLLAMA_MODEL en .env")
+        return
 
-    # ----- CONFIGURACIÓN INICIAL -------------------------------
     usuarios = get_gente()
-
     if AGENT_NAME not in usuarios:
         register_agent(AGENT_NAME)
-    else:
-        print("Alias ya registrado.")
 
-    faltantes, sobrantes = calcular_estado()
-    print(f"📊 Estado: Faltan {faltantes} | Sobran {sobrantes}")
+    state = get_state()
+    if state is None:
+        print("❌ No se pudo conectar al servidor. Abortando.")
+        return
 
-    prompt_inicial = cargar_prompt(
-        "prompt_inicial",
-        alias=AGENT_NAME,
-        faltantes=faltantes,
-        sobrantes=sobrantes,
-        usuarios=usuarios,
-    )
+    print(f"📊 Estado inicial — Faltantes: {state['faltantes']} | Sobrantes: {state['sobrantes']}")
 
-    # ----- EJECUCIÓN DE LAS FASES ------------------------------
-    # 1. El agente envía cartas para buscar los recursos que le faltan
-    fase_difusion(faltantes, sobrantes, usuarios, prompt_inicial)
-    # 2. El agente entra en modo reactivo para responder a los mensajes
-    fase_reactiva(prompt_inicial, usuarios)
+    system_prompt = _build_system_prompt()
+
+    fase_difusion(state["faltantes"], state["sobrantes"], usuarios)
+    fase_reactiva(system_prompt, usuarios)
 
 
 if __name__ == "__main__":

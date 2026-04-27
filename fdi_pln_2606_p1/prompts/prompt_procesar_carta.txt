@@ -1,46 +1,47 @@
-Actúas como un gestor de recursos astuto. Tu objetivo es reunir TODOS los
-recursos listados en `RECURSOS FALTANTES`.
+Analiza la carta recibida y decide cómo responder.
 
 ESTADO ACTUAL:
-- RECURSOS FALTANTES: {faltantes}
-- RECURSOS SOBRANTES: {sobrantes}
+- FALTANTES (recursos que necesito): {faltantes}
+- SOBRANTES (recursos disponibles para intercambio): {sobrantes}
 
 CARTA RECIBIDA:
 - Remitente: {usuario}
 - Asunto: {asunto}
 - Contenido: {contenido}
 
-REGLAS DE DECISIÓN LÓGICA:
-1. Analiza qué recurso te PIDE (o espera) el remitente y qué recurso te OFRECE (o ya te ha enviado).
-2. IGNORAR ("esperar"): Si el remitente es "Sistema" o el asunto es "Paquete recibido", la acción es "esperar".
-3. CUMPLIR PACTOS ("enviar_paquete"): Si el mensaje indica que el usuario YA TE HA ENVIADO un paquete y está a la espera de recibir su parte (ej: "Quedo a la espera de recibir 1 de oro"):
-   - Es una obligación. Debes completar el intercambio.
-   - Acción: "enviar_paquete".
-   - El `recurso_solicitado` (lo que tú envías) será el recurso que el usuario indica que está esperando (ej. "oro").
-   - El `recurso_ofrecido` (lo que tú recibes) será el recurso que el usuario dice haberte enviado (ej. "madera").
-4. RECHAZAR ("esperar"): Si es una propuesta nueva y te pide un recurso que NO tienes en tus `SOBRANTES` o te pide más cantidad de la que tienes disponible.
-5. RECHAZAR ("esperar"): Si es una propuesta nueva y te ofrece un recurso que NO está en tus `FALTANTES` (salvo que sea "oro").
-6. ACEPTAR ("enviar_paquete"): Si es una propuesta nueva, te ofrece un recurso que necesitas (está en `FALTANTES`) o "oro", Y tienes cantidad suficiente en `SOBRANTES` para pagar.
+REGLAS DE DECISIÓN (aplica en este orden):
 
-REGLA DE SEGURIDAD:
-- NUNCA enviar un recurso si no dispones en `sobrantes` de la cantidad exacta o mayor
-  que se solicita en la carta.
-- El oro es siempre aceptable aunque no forme parte de `faltantes`: si te ofrecen oro
-  por algo que te sobra y tienes stock suficiente, acepta.
+1. IGNORAR ("esperar"):
+   - El remitente es "Sistema" o el asunto es "Paquete recibido".
+   - La carta no contiene una propuesta ni un pacto pendiente.
 
-REGLAS DE FORMATO (CRÍTICO):
-- Genera SOLO UN JSON. Nada de texto antes ni después.
-- Usa la clave "razonamiento" para pensar tu decisión antes de elegir la acción.
-- Si la acción es "esperar", rellena el destinatario y los recursos con valores por defecto (ej. "ninguno", 1).
-- Si la acción es "enviar_paquete", rellena el destinatario y los recursos con los valores extraídos de la carta.
+2. CUMPLIR PACTO ("enviar_paquete"):
+   - El usuario dice que YA TE ENVIÓ un paquete y espera recibir su parte.
+   - Es una obligación: debes enviar lo que prometiste, siempre que lo tengas en SOBRANTES.
+   - "recurso_enviar" = lo que tú mandas ahora (lo que él espera recibir).
+   - "recurso_recibir" = lo que él ya te envió (lo que tú ya recibiste o recibirás).
 
-FORMATO DE RESPUESTA OBLIGATORIO:
+3. ACEPTAR ("enviar_paquete"):
+   - La carta propone un intercambio nuevo.
+   - Te ofrece algo que NECESITAS (está en FALTANTES) o te ofrece oro.
+   - Y te pide algo que TIENES en SOBRANTES con cantidad suficiente.
+   - "recurso_enviar" = lo que la carta te pide = lo que TÚ mandas.
+   - "recurso_recibir" = lo que la carta te ofrece = lo que TÚ recibes.
+
+4. RECHAZAR ("esperar"):
+   - En cualquier otro caso: no tienes lo que piden, no te interesa lo que ofrecen,
+     o la propuesta no te beneficia.
+
+SEGURIDAD CRÍTICA: Nunca pongas en "recurso_enviar" un recurso con cantidad superior
+a la que tienes en SOBRANTES. Si dudas, elige "esperar".
+
+FORMATO (solo JSON):
 {{
-  "razonamiento": "Ej: El usuario pide madera (tengo 3) y me ofrece trigo (me falta 1). Acepto.",
+  "razonamiento": "explica qué propone la carta y por qué aceptas o rechazas",
   "accion": "enviar_paquete" | "esperar",
   "destinatario": "{usuario}",
-  "recurso_solicitado": "nombre_del_recurso_que_TE_PIDE_la_carta",
-  "cantidad_recurso_solicitado": 1,
-  "recurso_ofrecido": "nombre_del_recurso_que_TE_OFRECE_la_carta",
-  "cantidad_recurso_ofrecido": 1
+  "recurso_enviar": "recurso que TÚ sacas de tu inventario y mandas",
+  "cantidad_recurso_enviar": 1,
+  "recurso_recibir": "recurso que TÚ recibirás a cambio",
+  "cantidad_recurso_recibir": 1
 }}
