@@ -11,37 +11,26 @@ CARTA RECIBIDA:
 
 REGLAS DE DECISIÓN (aplica en este orden):
 
-1. IGNORAR ("esperar"):
-   - El remitente es "Sistema" o el asunto es "Paquete recibido".
+1. IGNORAR (accion="esperar"):
    - La carta no contiene una propuesta ni un pacto pendiente.
 
-2. CUMPLIR PACTO ("enviar_paquete"):
-   - El usuario dice que YA TE ENVIÓ un paquete y espera recibir su parte.
-   - Es una obligación: debes enviar lo que prometiste, siempre que lo tengas en SOBRANTES.
-   - "recurso_enviar" = lo que tú mandas ahora (lo que él espera recibir).
-   - "recurso_recibir" = lo que él ya te envió (lo que tú ya recibiste o recibirás).
+2. CUMPLIR PACTO (accion="enviar_paquete"):
+   - El asunto es "Paquete enviado": el remitente YA te envió algo y espera recibir su parte.
+   - Identifica en el contenido: qué envió él (env_item) y qué espera recibir (esp_item).
+   - recurso_enviar = esp_item (lo que él espera recibir de ti).
+   - recurso_recibir = env_item (lo que él ya te envió).
+   - Solo acepta si recurso_enviar está en tus SOBRANTES.
 
-3. ACEPTAR ("enviar_paquete"):
+3. ACEPTAR (accion="enviar_paquete"):
    - La carta propone un intercambio nuevo.
    - Te ofrece algo que NECESITAS (está en FALTANTES) o te ofrece oro.
    - Y te pide algo que TIENES en SOBRANTES con cantidad suficiente.
-   - "recurso_enviar" = lo que la carta te pide = lo que TÚ mandas.
-   - "recurso_recibir" = lo que la carta te ofrece = lo que TÚ recibes.
+   - recurso_enviar = lo que la carta te pide = lo que TÚ mandas.
+   - recurso_recibir = lo que la carta te ofrece = lo que TÚ recibes.
 
-4. RECHAZAR ("esperar"):
+4. RECHAZAR (accion="esperar"):
    - En cualquier otro caso: no tienes lo que piden, no te interesa lo que ofrecen,
      o la propuesta no te beneficia.
 
-SEGURIDAD CRÍTICA: Nunca pongas en "recurso_enviar" un recurso con cantidad superior
+SEGURIDAD CRÍTICA: Nunca pongas en recurso_enviar un recurso con cantidad superior
 a la que tienes en SOBRANTES. Si dudas, elige "esperar".
-
-FORMATO (solo JSON):
-{{
-  "razonamiento": "explica qué propone la carta y por qué aceptas o rechazas",
-  "accion": "enviar_paquete" | "esperar",
-  "destinatario": "{usuario}",
-  "recurso_enviar": "recurso que TÚ sacas de tu inventario y mandas",
-  "cantidad_recurso_enviar": 1,
-  "recurso_recibir": "recurso que TÚ recibirás a cambio",
-  "cantidad_recurso_recibir": 1
-}}

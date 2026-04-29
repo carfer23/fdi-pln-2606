@@ -40,19 +40,17 @@ def fase_difusion(faltantes: dict, sobrantes: dict, usuarios: list[str]) -> None
         print("No hay otros agentes disponibles.")
         return
 
-    for i, usuario in enumerate(destinatarios):
-        # Rotamos qué recursos pedimos/ofrecemos para diversificar propuestas
-        item_need = items_need[i % len(items_need)]
-        item_offer = items_offer[i % len(items_offer)]
-
-        cuerpo = cargar_carta(
-            "carta_difusion",
-            dest=usuario, alias=AGENT_NAME,
-            req_cant=1, req=item_need,
-            ofr_cant=1, ofr=item_offer,
-        )
-        enviar_carta(usuario, "Propuesta de intercambio", cuerpo)
-        time.sleep(0.5)
+    for usuario in destinatarios:
+        for j, item_need in enumerate(items_need):
+            item_offer = items_offer[j % len(items_offer)]
+            cuerpo = cargar_carta(
+                "carta_difusion",
+                dest=usuario, alias=AGENT_NAME,
+                req_cant=1, req=item_need,
+                ofr_cant=1, ofr=item_offer,
+            )
+            enviar_carta(usuario, "Propuesta de intercambio", cuerpo)
+            time.sleep(0.5)
 
 
 def _procesar_buzon(buzon: dict[str, dict], system_prompt: str) -> None:
@@ -69,6 +67,11 @@ def _procesar_buzon(buzon: dict[str, dict], system_prompt: str) -> None:
         asunto = datos.get("asunto", "")
         print(f"\n📩 Carta de {remitente} [{asunto}]")
 
+        if remitente == "Sistema":
+            print("ℹ️ Carta del Sistema, ignorando.")
+            borrar_carta(carta_id)
+            continue
+
         prompt = cargar_prompt(
             "prompt_procesar_carta",
             usuario=remitente,
@@ -79,6 +82,16 @@ def _procesar_buzon(buzon: dict[str, dict], system_prompt: str) -> None:
         )
 
         accion = ollama_generate(prompt, system_prompt)
+
+        if accion.get("accion") == "enviar_paquete":
+            recurso = accion.get("recurso_enviar", "")
+            cantidad = int(accion.get("cantidad_recurso_enviar") or 0)
+            disponible = state["sobrantes"].get(recurso, 0)
+            if disponible < cantidad:
+                print(f"⚠️ LLM quería enviar {cantidad}x {recurso} pero solo hay {disponible} en sobrantes. Ignorando.")
+                borrar_carta(carta_id)
+                continue
+
         ejecutar_accion(accion)
         borrar_carta(carta_id)
         time.sleep(1)
