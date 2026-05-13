@@ -122,7 +122,7 @@ wheels = [
 
 [[package]]
 name = "fdi-pln-2606-p1"
-version = "1.0"
+version = "1.2"
 source = { editable = "." }
 dependencies = [
     { name = "ollama" },

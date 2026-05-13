@@ -1,0 +1,4 @@
+Genera una acción JSON para enviar una carta a '{usuario}'.
+    CONTEXTO:
+    - Solicitar: {cant_a_pedir} de {item_need}
+    - Ofrecer a cambio: {cant_a_ofrecer} de {item_offer}
