@@ -1,10 +1,14 @@
 # Virtual environments
 venv/
 .env/
+.venv/
 
 # IDE/editor
 .vscode/
 .idea/
 
 __pycache__/
-estado_butler.json
+
+fdi_pln_2606_p1/src/*.json
+fdi_pln_2606_p1/*.json
+logs/
