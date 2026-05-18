@@ -10,7 +10,7 @@ from utils import console
 
 def get_gente() -> list[str]:
     """Mira los alias registrados en el servidor y devuelve una lista con los nombres.
-    
+
     :return: lista de alias de los agentes registrados en el servidor
     """
     url = f"{URL_BASE}/gente"
@@ -28,7 +28,7 @@ def get_gente() -> list[str]:
 
 def get_info() -> dict | None:
     """Obtiene toda la info del agente de una vez.
-    
+
     :return: diccionario con la información del agente
     """
     try:
@@ -51,7 +51,7 @@ def get_buzon() -> Dict:
 def calcular_estado() -> EstadoRecursos:
     """A partir de los recursos disponibles y los recursos objetivo,
     calcula los recursos faltantes y sobrantes. Devuelve dos diccionarios.
-    
+
     :return: (faltantes, sobrantes)
     """
     info = get_info()
@@ -62,7 +62,15 @@ def calcular_estado() -> EstadoRecursos:
     recursos = info.get("Recursos", {})
     objetivo = info.get("Objetivo", {})
 
-    faltantes = {k: v - recursos.get(k, 0) for k, v in objetivo.items() if v - recursos.get(k, 0) > 0}
-    sobrantes = {k: v - objetivo.get(k, 0) for k, v in recursos.items() if v - objetivo.get(k, 0) > 0}
+    faltantes = {
+        k: v - recursos.get(k, 0)
+        for k, v in objetivo.items()
+        if v - recursos.get(k, 0) > 0
+    }
+    sobrantes = {
+        k: v - objetivo.get(k, 0)
+        for k, v in recursos.items()
+        if v - objetivo.get(k, 0) > 0
+    }
 
     return EstadoRecursos(faltantes=faltantes, sobrantes=sobrantes)

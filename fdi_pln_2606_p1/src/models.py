@@ -20,6 +20,7 @@ class Carta:
             cuerpo=datos.get("cuerpo", ""),
         )
 
+
 @dataclass
 class EstadoRecursos:
     faltantes: Dict[str, int] = field(default_factory=dict)
