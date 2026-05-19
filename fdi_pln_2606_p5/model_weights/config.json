@@ -1,0 +1,9 @@
+{
+  "d_model": 128,
+  "n_heads": 4,
+  "n_layers": 4,
+  "seq_len": 128,
+  "vocab_size": 300,
+  "expansion": 4,
+  "dropout": 0.1
+}

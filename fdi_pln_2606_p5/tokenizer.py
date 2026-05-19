@@ -79,6 +79,29 @@ class BPETokenizer():
         # Concatena los tokens directamente (BPE ya incluye los espacios como parte del token)
         return "".join(text)
 
+    def save(self, path):
+        """Serializa el vocabulario y los merges a JSON para reutilizarlos sin reentrenar."""
+        import json
+        state = {
+            "vocab": self.vocab,
+            "vocab_size": self.vocab_size,
+            "merges": [[list(pair), new_id] for pair, new_id in self.merges],
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False)
+
+    @classmethod
+    def load(cls, path):
+        """Carga un tokenizador previamente guardado con save()."""
+        import json
+        state = json.load(open(path, encoding="utf-8"))
+        obj = cls.__new__(cls)
+        obj.vocab = state["vocab"]
+        obj.vocab_size = state["vocab_size"]
+        obj.tok2id = {tok: i for i, tok in enumerate(obj.vocab)}
+        obj.merges = [(tuple(pair), new_id) for pair, new_id in state["merges"]]
+        return obj
+
     def __repr__(self):
         pretty = [t.replace("\n", "\\n").replace(" ", "▁") for t in self.vocab]
         return f"{len(self.vocab)} tokens: ['{"', '".join(pretty)}']"

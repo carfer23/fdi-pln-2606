@@ -1,7 +1,7 @@
 """Entrenamiento del LLM causal sobre un corpus de textos."""
 
 import time
-import matplotlib.pyplot as plt
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -94,43 +94,42 @@ def _run_epoch(model, dataloader, label, optimizer=None):
     return total_loss / n
 
 
-def _plot_losses(train_losses, val_losses, path="loss_charts/loss.png"):
-    """Grafica la evolución de las pérdidas de entrenamiento y validación."""
-    epochs = range(1, len(train_losses) + 1)
-    plt.figure(figsize=(8, 5))
-    plt.plot(epochs, train_losses, marker="o", label="Train loss")
-    plt.plot(epochs, val_losses,   marker="o", label="Val loss")
-    plt.xlabel("Época")
-    plt.ylabel("Loss")
-    plt.title("Train vs Val Loss")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(path)
-    plt.close()
-    logger.info(f"Gráfica guardada en {path}")
+def _save_losses(train_losses, val_losses, path="loss_charts/loss.txt"):
+    """Guarda las pérdidas en un fichero de texto para análisis posterior."""
+    Path(path).parent.mkdir(exist_ok=True)
+    with open(path, "w") as f:
+        f.write("epoch\ttrain_loss\tval_loss\n")
+        for i, (tr, va) in enumerate(zip(train_losses, val_losses), 1):
+            f.write(f"{i}\t{tr:.6f}\t{va:.6f}\n")
+    logger.info(f"Pérdidas guardadas en {path}")
 
 
-def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio):
+def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio=0.9):
     """Entrena el modelo de lenguaje causal sobre los tokens dados.
 
     Realiza `epochs` épocas de entrenamiento con AdamW, registrando train/val
-    loss en cada época.
+    loss en cada época y guardando las pérdidas en disco.
     """
     train_dl, val_dl = _make_dataloaders(tokens, context_size, batch_size, train_ratio)
 
     # El optimizador ajusta los parámetros que le pasamos en función del
     # gradiente (calculado con forward y backward) y la tasa de aprendizaje
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+
+    # Cosine annealing: reduce LR suavemente hasta lr/10 al final
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.1)
 
     train_losses, val_losses = [], []
 
     t0 = time.time()
     for epoch in range(epochs):
-        train_loss = _run_epoch(model, train_dl, optimizer, label="train")
-        val_loss = _run_epoch(model, val_dl, None, label="val  ")
+        # BUG FIX: el tercer arg posicional es `label`, no `optimizer`
+        train_loss = _run_epoch(model, train_dl, "train", optimizer=optimizer)
+        val_loss   = _run_epoch(model, val_dl,   "val  ")
 
-        # Guardamos las pérdidas para graficar al final
+        scheduler.step()
+
+        # Guardamos las pérdidas para análisis posterior
         train_losses.append(train_loss)
         val_losses.append(val_loss)
 
@@ -143,7 +142,7 @@ def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio):
 
     elapsed = time.time() - t0
     logger.info(f"Entrenamiento finalizado en {elapsed:.1f}s")
-    _plot_losses(train_losses, val_losses)
+    _save_losses(train_losses, val_losses)
 
 
 if __name__ == "__main__":
@@ -188,7 +187,7 @@ if __name__ == "__main__":
           f"seq_len={args.seq_len}, expansion={args.expansion}, dropout={args.dropout}, "
           f"vocab_size={args.vocab_size}, epochs={args.epochs}, batch_size={args.batch_size}")
 
-    # Creamos el modelo y lo movemos al dispositivo (GPU o CPU)
+    # Creamos el modelo 
     model = CausalLLM(
         vocab_size=tokenizer.vocab_size,
         max_seq_len=args.seq_len,
@@ -204,11 +203,21 @@ if __name__ == "__main__":
     logger.info(f"Parámetros del modelo: {n_params:,}\n")
 
     # Entrenamos el modelo con los tokens del corpus
-    train(model, tokens, epochs=args.epochs, context_size=args.seq_len, batch_size=args.batch_size, lr=args.lr)
+    train(model, tokens, epochs=args.epochs, context_size=args.seq_len,
+          batch_size=args.batch_size, lr=args.lr)
 
-    # Guardamos los pesos del modelo
+    # Guardamos los pesos del modelo y el tokenizador
+    import json, pathlib
+    pathlib.Path("model_weights").mkdir(exist_ok=True)
     SAVE_PATH = "model_weights/model.pth"
     torch.save(model.state_dict(), SAVE_PATH)
+    tokenizer.save("model_weights/tokenizer.json")
+    json.dump(
+        {"d_model": args.d_model, "n_heads": args.n_heads, "n_layers": args.n_layers,
+         "seq_len": args.seq_len, "vocab_size": tokenizer.vocab_size,
+         "expansion": args.expansion, "dropout": args.dropout},
+        open("model_weights/config.json", "w"),
+    )
     logger.info(f"Pesos guardados en {SAVE_PATH}")
 
     # Probamos a generar texto a partir de un prompt
