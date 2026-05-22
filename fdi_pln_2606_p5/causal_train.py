@@ -123,7 +123,6 @@ def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio=0.9):
 
     t0 = time.time()
     for epoch in range(epochs):
-        # BUG FIX: el tercer arg posicional es `label`, no `optimizer`
         train_loss = _run_epoch(model, train_dl, "train", optimizer=optimizer)
         val_loss   = _run_epoch(model, val_dl,   "val", optimizer=None)
 
@@ -161,12 +160,12 @@ if __name__ == "__main__":
     parser.add_argument("--corpus",     type=str,   default="resources")
     parser.add_argument("--d_model",    type=int,   default=128)
     parser.add_argument("--n_heads",    type=int,   default=4)
-    parser.add_argument("--n_layers",   type=int,   default=4)
+    parser.add_argument("--n_layers",   type=int,   default=3)
     parser.add_argument("--seq_len",    type=int,   default=128)
     parser.add_argument("--expansion",  type=int,   default=4)
     parser.add_argument("--dropout",    type=float, default=0.1)
     parser.add_argument("--vocab_size", type=int,   default=300)
-    parser.add_argument("--epochs",     type=int,   default=5)
+    parser.add_argument("--epochs",     type=int,   default=4)
     parser.add_argument("--batch_size", type=int,   default=40)
     parser.add_argument("--lr",         type=float, default=3e-4)
     args = parser.parse_args()

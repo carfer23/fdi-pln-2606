@@ -12,3 +12,6 @@ __pycache__/
 fdi_pln_2606_p1/src/*.json
 fdi_pln_2606_p1/*.json
 logs/
+
+model_info/
+labels/
