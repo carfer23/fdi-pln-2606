@@ -1,6 +1,6 @@
 [project]
 name = "fdi-pln-2606-p1"
-version = "1.2"
+version = "2.0"
 description = "Agente IA para la práctica 1"
 readme = "README.md"
 requires-python = ">=3.12"
