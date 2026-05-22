@@ -94,16 +94,6 @@ def _run_epoch(model, dataloader, label, optimizer=None):
     return total_loss / n
 
 
-def _save_losses(train_losses, val_losses, path="logs/loss.txt"):
-    """Guarda las pérdidas en un fichero de texto para análisis posterior."""
-    Path(path).parent.mkdir(exist_ok=True)
-    with open(path, "w") as f:
-        f.write("epoch\ttrain_loss\tval_loss\n")
-        for i, (tr, va) in enumerate(zip(train_losses, val_losses), 1):
-            f.write(f"{i}\t{tr:.6f}\t{va:.6f}\n")
-    logger.info(f"Pérdidas guardadas en {path}")
-
-
 def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio=0.9):
     """Entrena el modelo de lenguaje causal sobre los tokens dados.
 
@@ -142,8 +132,9 @@ def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio=0.9):
     elapsed = time.time() - t0
     logger.info(f"Entrenamiento finalizado en {elapsed:.1f}s")
 
-    # Guardamos las pérdidas en disco para análisis posterior
-    _save_losses(train_losses, val_losses)
+    # Guardamos las pérdidas en disco para análisis posterior usando utils
+    from utils import save_losses
+    save_losses(train_losses, val_losses, path="logs/loss.txt")
 
 
 if __name__ == "__main__":
@@ -151,7 +142,7 @@ if __name__ == "__main__":
     import pathlib
     import json
 
-    from corpus import load_corpus
+    from utils import load_corpus
     from causal_llm import CausalLLM
     from tokenizer import BPETokenizer
 
@@ -219,7 +210,7 @@ if __name__ == "__main__":
           batch_size=args.batch_size, lr=args.lr)
 
     # Guardamos los pesos del modelo y el tokenizador
-    SAVE_PATH = model_dir / "model.pth"
+    SAVE_PATH = model_dir / "p5_causal_2606.pth"
     torch.save(model.state_dict(), SAVE_PATH)
     tokenizer.save(model_dir / "tokenizer.json")
     json.dump(
