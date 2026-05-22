@@ -94,7 +94,7 @@ def _run_epoch(model, dataloader, label, optimizer=None):
     return total_loss / n
 
 
-def _save_losses(train_losses, val_losses, path="loss_charts/loss.txt"):
+def _save_losses(train_losses, val_losses, path="logs/loss.txt"):
     """Guarda las pérdidas en un fichero de texto para análisis posterior."""
     Path(path).parent.mkdir(exist_ok=True)
     with open(path, "w") as f:
@@ -117,7 +117,7 @@ def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio=0.9):
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
 
     # Cosine annealing: reduce LR suavemente hasta lr/10 al final
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.1)
+    #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.1)
 
     train_losses, val_losses = [], []
 
@@ -125,13 +125,9 @@ def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio=0.9):
     for epoch in range(epochs):
         # BUG FIX: el tercer arg posicional es `label`, no `optimizer`
         train_loss = _run_epoch(model, train_dl, "train", optimizer=optimizer)
-        val_loss   = _run_epoch(model, val_dl,   "val  ")
+        val_loss   = _run_epoch(model, val_dl,   "val", optimizer=None)
 
-        scheduler.step()
-
-        # Guardamos las pérdidas para análisis posterior
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
+        #scheduler.step()
 
         elapsed = time.time() - t0
 
@@ -140,13 +136,21 @@ def train(model, tokens, epochs, context_size, batch_size, lr, train_ratio=0.9):
             f"val={val_loss:.4f} | tiempo={elapsed:.1f}s"
         )
 
+        # Guardamos las pérdidas
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+
     elapsed = time.time() - t0
     logger.info(f"Entrenamiento finalizado en {elapsed:.1f}s")
+
+    # Guardamos las pérdidas en disco para análisis posterior
     _save_losses(train_losses, val_losses)
 
 
 if __name__ == "__main__":
     import argparse
+    import pathlib
+    import json
 
     from corpus import load_corpus
     from causal_llm import CausalLLM
@@ -166,6 +170,15 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int,   default=40)
     parser.add_argument("--lr",         type=float, default=3e-4)
     args = parser.parse_args()
+
+    # Preparar carpetas de salida
+    logs_dir = pathlib.Path("logs")
+    model_dir = pathlib.Path("model_info")
+    logs_dir.mkdir(exist_ok=True)
+    model_dir.mkdir(exist_ok=True)
+
+    # Guardar logs de logger a fichero
+    logger.add(logs_dir / "train.log", rotation="50 MB")
 
     # Detectamos el dispositivo disponible (GPU si hay, sino CPU)
     if torch.cuda.is_available():
@@ -207,16 +220,15 @@ if __name__ == "__main__":
           batch_size=args.batch_size, lr=args.lr)
 
     # Guardamos los pesos del modelo y el tokenizador
-    import json, pathlib
-    pathlib.Path("model_weights").mkdir(exist_ok=True)
-    SAVE_PATH = "model_weights/model.pth"
+    SAVE_PATH = model_dir / "model.pth"
     torch.save(model.state_dict(), SAVE_PATH)
-    tokenizer.save("model_weights/tokenizer.json")
+    tokenizer.save(model_dir / "tokenizer.json")
     json.dump(
         {"d_model": args.d_model, "n_heads": args.n_heads, "n_layers": args.n_layers,
          "seq_len": args.seq_len, "vocab_size": tokenizer.vocab_size,
-         "expansion": args.expansion, "dropout": args.dropout},
-        open("model_weights/config.json", "w"),
+         "expansion": args.expansion, "dropout": args.dropout, "vocab_size": args.vocab_size,
+         "epochs": args.epochs, "batch_size": args.batch_size, "lr": args.lr},
+        open(model_dir / "config.json", "w"),
     )
     logger.info(f"Pesos guardados en {SAVE_PATH}")
 

@@ -8,7 +8,11 @@ from attention import Attention
 class FeedForward(nn.Module):
     """Capa feedforward del Transformer.
 
-    Toma cada vector de embedding de un token y le aplica un perceptrón.
+    Toma cada vector de embedding de un token y le aplica un perceptrón
+    con capa intermedia *más amplia*, y activación GELU.
+
+    El factor de expansión permite a la red encontrar y procesar patrones en un
+    espacio menos denso que d_model.
     """
 
     def __init__(self, d_model, expansion, dropout):
@@ -36,6 +40,8 @@ class Block(nn.Module):
     Incluye las dos cosas principales:
     1. Mecanismo de atención para atender al contexto, aprender matices y ambiguedades.
     2. Red feed-forward, para aprender a abstraer y generar las entradas de la siguiente capa.
+    
+    Se incluyen capas de normalización para regularizar el aprendizaje.
     """
 
     def __init__(self, d_model, n_heads, max_seq_len, expansion, dropout):

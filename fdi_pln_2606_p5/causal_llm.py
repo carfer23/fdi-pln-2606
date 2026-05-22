@@ -34,9 +34,11 @@ class CausalLLM(Transformer):
         idx      Tensor (batch, n_tokens) con ids de tokens de entrada
         targets  Tensor (batch, n_tokens) con ids objetivo; si se pasa, calcula el loss
         """
+        # Forward de la clase Transformer
         x = super().forward(idx, causal=True)
 
         # Calculamos los logits para cada elemento del vocabulario
+        # logits: puntuación de cada token del vocabulario como posible siguiente token
         logits = self.lm_head(x)
 
         if targets is None:
