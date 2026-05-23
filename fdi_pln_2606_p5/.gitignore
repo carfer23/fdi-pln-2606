@@ -1,0 +1,15 @@
+# Pesos del modelo (binarios — distribuir por separado, no subir al repositorio)
+*.pth
+model_weights/
+
+# Artefactos Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# macOS
+.DS_Store
+
+# Logs de entrenamiento
+logs/

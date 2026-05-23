@@ -11,6 +11,7 @@ from loguru import logger
 from ner import NERLLM, NERDataset, collate_ner, NUM_LABELS
 from tokenizer import BPETokenizer
 
+
 def load_ner_from_merged(path="labels/merged.json"):
     """
     Lee el archivo merged.json que contiene la lista de diccionarios.
@@ -19,18 +20,19 @@ def load_ner_from_merged(path="labels/merged.json"):
     """
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
+
     samples = []
     for item in data:
         # En el json: "tokens" y "labels".
         # Palabras y etiquetas alineadas a nivel de palabra
         words = item.get("tokens", [])
         labels = item.get("labels", [])
-        
+
         if len(words) > 0 and len(words) == len(labels):
             samples.append((words, labels))
-    
+
     return samples
+
 
 def _make_dataloaders(ner_data, tokenizer, batch_size, train_ratio=0.9):
     """Crea DataLoaders para entrenamiento y validación con padding dinámico."""
@@ -40,9 +42,12 @@ def _make_dataloaders(ner_data, tokenizer, batch_size, train_ratio=0.9):
     logger.info(f"Train: {len(train_ds):,} frases, Val: {len(val_ds):,}")
 
     return (
-        DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_ner),
+        DataLoader(
+            train_ds, batch_size=batch_size, shuffle=True, collate_fn=collate_ner
+        ),
         DataLoader(val_ds, batch_size=batch_size, collate_fn=collate_ner),
     )
+
 
 def _run_epoch(model, dataloader, label, optimizer=None, class_weights=None):
     """Ejecuta una epoch completa de entrenamiento o evaluación."""
@@ -74,9 +79,10 @@ def _run_epoch(model, dataloader, label, optimizer=None, class_weights=None):
         n += 1
 
         if n % max(1, total // 10) == 0:
-            logger.info(f"{label} | Batch {n}/{total} | Loss={total_loss/n:.4f}")
+            logger.info(f"{label} | Batch {n}/{total} | Loss={total_loss / n:.4f}")
 
     return total_loss / n
+
 
 def _compute_class_weights(train_ds):
     """Calcula pesos inversamente proporcionales a la frecuencia de cada clase en el dataset."""
@@ -92,16 +98,34 @@ def _compute_class_weights(train_ds):
     return weights
 
 
-def train_ner(model, ner_data, tokenizer, epochs, batch_size, lr):
+def train_ner(
+    model,
+    ner_data,
+    tokenizer,
+    epochs,
+    batch_size,
+    lr,
+    freeze_backbone=True,
+    save_losses_to="logs/ner_loss.txt",
+):
+    """Entrena la cabeza NER sobre ner_data.
+
+    Args:
+        freeze_backbone: si True (por defecto) congela el backbone y solo
+            entrena la cabeza NER; si False, hace fine-tuning completo.
+        save_losses_to: ruta donde guardar las pérdidas por época. Si None,
+            no guarda ningún fichero (útil en búsquedas de hiperparámetros).
+
+    Returns:
+        (train_losses, val_losses): listas con la pérdida de cada época.
+    """
     train_dl, val_dl = _make_dataloaders(ner_data, tokenizer, batch_size)
 
-    # Congelar el backbone (Transformer base)
-    for name, param in model.named_parameters():
-        if "ner_head" not in name:
-            param.requires_grad = False
-    
-    # Podemos aplicar un learning rate diferente para el backbone y para la nueva cabeza lineal
-    # Asignamos todo a AdamW por simplicidad, para fine-tuning se recomienda un lr bajo
+    if freeze_backbone:
+        for name, param in model.named_parameters():
+            if "ner_head" not in name:
+                param.requires_grad = False
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
 
     class_weights = _compute_class_weights(train_dl.dataset)
@@ -134,32 +158,38 @@ def train_ner(model, ner_data, tokenizer, epochs, batch_size, lr):
             f"Epoca {epoch + 1}/{epochs} | train={train_loss:.4f} | "
             f"val={val_loss:.4f} | tiempo={elapsed:.1f}s"
         )
-    
-    # Importar save_losses desde utils
-    from utils import save_losses
-    save_losses(train_losses, val_losses, path="logs/ner_loss.txt")
+
+    if save_losses_to:
+        from utils import save_losses
+
+        save_losses(train_losses, val_losses, path=save_losses_to)
     logger.info(f"Fine-tuning finalizado en {time.time() - t0:.1f}s")
+    return train_losses, val_losses
 
 
 if __name__ == "__main__":
     import argparse
     import re
     from utils import load_corpus
-    
-    parser = argparse.ArgumentParser(description="Fine-tuning para NER de un CausalLLM preentrenado")
-    parser.add_argument("--epochs",     type=int,   default=10)
-    parser.add_argument("--batch_size", type=int,   default=16)
-    parser.add_argument("--lr",         type=float, default=5e-5) # Menor lr para fine-tuning
-    parser.add_argument("--merged_json", type=str,  default="labels/merged.json")
-    parser.add_argument("--model_path", type=str,   default="model_info/p5_causal_2606.pth")
-    parser.add_argument("--corpus",     type=str,   default="resources")
-    parser.add_argument("--d_model",    type=int,   default=128)
-    parser.add_argument("--n_heads",    type=int,   default=4)
-    parser.add_argument("--n_layers",   type=int,   default=3)
-    parser.add_argument("--seq_len",    type=int,   default=128)
-    parser.add_argument("--expansion",  type=int,   default=4)
-    parser.add_argument("--dropout",    type=float, default=0.1)
-    parser.add_argument("--vocab_size", type=int,   default=300)
+
+    parser = argparse.ArgumentParser(
+        description="Fine-tuning para NER de un CausalLLM preentrenado"
+    )
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=5e-5)  # Menor lr para fine-tuning
+    parser.add_argument("--merged_json", type=str, default="labels/merged.json")
+    parser.add_argument(
+        "--model_path", type=str, default="model_info/p5_causal_2606.pth"
+    )
+    parser.add_argument("--corpus", type=str, default="resources")
+    parser.add_argument("--d_model", type=int, default=128)
+    parser.add_argument("--n_heads", type=int, default=4)
+    parser.add_argument("--n_layers", type=int, default=3)
+    parser.add_argument("--seq_len", type=int, default=128)
+    parser.add_argument("--expansion", type=int, default=4)
+    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--vocab_size", type=int, default=300)
     args = parser.parse_args()
 
     # Almacenar logs
@@ -168,7 +198,13 @@ if __name__ == "__main__":
     logger.add(logs_dir / "ner.log", rotation="50 MB")
 
     # 1. Detectar dispositivo
-    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
     logger.info(f"Usando {device} para fine-tuning NER.")
 
     # 2. Entrenar tokenizador
@@ -185,7 +221,7 @@ if __name__ == "__main__":
         n_layers=args.n_layers,
         expansion=args.expansion,
         dropout=args.dropout,
-        num_labels=NUM_LABELS
+        num_labels=NUM_LABELS,
     )
 
     # 4. Cargar los pesos preentrenados en el backbone
@@ -193,25 +229,32 @@ if __name__ == "__main__":
     if not pth_path.exists():
         logger.error(f"Falta el modelo preentrenado en {pth_path}")
         sys.exit(1)
-        
+
     logger.info("Cargando pesos preentrenados del backbone...")
     state_dict = torch.load(pth_path, map_location="cpu", weights_only=True)
-    # Al usar strict=False, cargará las capas comunes de Transformer y omitirá el aviso 
+    # Al usar strict=False, cargará las capas comunes de Transformer y omitirá el aviso
     # de que le faltan los pesos de ner_head (porque los acaba de crear aleatorios)
     model.load_state_dict(state_dict, strict=False)
-    
+
     model.to(device)
 
     # 5. Cargar datos de etiquetas para el Fine-Tuning
     logger.info(f"Cargando dataset etiquetado desde {args.merged_json}...")
     ner_data = load_ner_from_merged(args.merged_json)
-    
+
     if not ner_data:
         logger.error("No se encontraron ejemplos válidos en el archivo JSON.")
         sys.exit(1)
 
     # 6. Ejecutar bucle de entrenamiento (Fine-Tuning)
-    train_ner(model, ner_data, tokenizer, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr)
+    train_ner(
+        model,
+        ner_data,
+        tokenizer,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+    )
 
     # 7. Guardar modelo NER
     model_dir = pathlib.Path(args.model_path).parent

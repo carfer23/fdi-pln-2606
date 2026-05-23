@@ -6,6 +6,7 @@ from torch.nn.functional import cross_entropy, softmax
 
 from transformer import Transformer
 
+
 class CausalLLM(Transformer):
     """Modelo de lenguaje causal para generación de texto.
 
@@ -17,8 +18,12 @@ class CausalLLM(Transformer):
     generalización y reduce el número de parámetros.
     """
 
-    def __init__(self, vocab_size, max_seq_len, d_model, n_heads, n_layers, expansion, dropout):
-        super().__init__(vocab_size, max_seq_len, d_model, n_heads, n_layers, expansion, dropout)
+    def __init__(
+        self, vocab_size, max_seq_len, d_model, n_heads, n_layers, expansion, dropout
+    ):
+        super().__init__(
+            vocab_size, max_seq_len, d_model, n_heads, n_layers, expansion, dropout
+        )
 
         # Proyectamos el espacio d_model al vocabulario para predecir el siguiente token
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
@@ -72,7 +77,7 @@ class CausalLLM(Transformer):
         # a partir del prompt, y preparamos el tensor con la dimensión de batch
         # (corchete exterior, batch=1) y el máximo de tokens que caben
         ventana = torch.tensor(
-            [prompt[-self.max_seq_len:]],
+            [prompt[-self.max_seq_len :]],
             dtype=torch.long,
             device=next(self.parameters()).device,
         )
@@ -92,6 +97,6 @@ class CausalLLM(Transformer):
 
             # Guardamos el token y deslizamos la ventana
             generados.append(next_token_id.item())
-            ventana = torch.cat([ventana, next_token_id], dim=1)[:, -self.max_seq_len:]
+            ventana = torch.cat([ventana, next_token_id], dim=1)[:, -self.max_seq_len :]
 
         return generados

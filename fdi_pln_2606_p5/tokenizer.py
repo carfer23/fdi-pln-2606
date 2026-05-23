@@ -2,7 +2,8 @@
 
 from collections import Counter
 
-class BPETokenizer():
+
+class BPETokenizer:
     """BPE entrenado sobre un texto.
 
     Vocabulario inicial: caracteres únicos del texto. Durante el
@@ -12,33 +13,41 @@ class BPETokenizer():
     NOTA: para ser BPE de verdad, tendríamos que hacerlo sobre bytes, no sobre
     caracteres, pero para la práctica funciona bien.
     """
-    
+
     def __init__(self, text, vocab_size=300):
         """Entrena el tokenizador sobre el texto dado.
-        
+
         :param text: texto de entrenamiento.
         :param vocab_size: número de tokens que tendrá el vocabulario final.
         """
-        self.vocab_size = vocab_size # Tamaño del vocabulario (número de tokens)
+        self.vocab_size = vocab_size  # Tamaño del vocabulario (número de tokens)
 
-        self.vocab = sorted(set(text)) # Conjunto de los caracteres del texto (sin repetidos)
-        self.tok2id = {tok: i for i, tok in enumerate(self.vocab)} # Diccionario con claves: tokens y valores: índice
-        #self.id2tok = {i: tok for tok, i in self.tok2id.items()} # Diccionario contrario, claves: índices y valores: tokens
+        self.vocab = sorted(
+            set(text)
+        )  # Conjunto de los caracteres del texto (sin repetidos)
+        self.tok2id = {
+            tok: i for i, tok in enumerate(self.vocab)
+        }  # Diccionario con claves: tokens y valores: índice
+        # self.id2tok = {i: tok for tok, i in self.tok2id.items()} # Diccionario contrario, claves: índices y valores: tokens
 
-        tokens = [self.tok2id[c] for c in text] # Lista con los índices de cada token (el texto tokenizado)
-        self.merges = [] # Lista de ((id_a, id_b), nuevo_id), para encode()
-        
+        tokens = [
+            self.tok2id[c] for c in text
+        ]  # Lista con los índices de cada token (el texto tokenizado)
+        self.merges = []  # Lista de ((id_a, id_b), nuevo_id), para encode()
+
         # Se van mergeando los pares más frecuentes hasta alcanzar el tamaño del vocabulario
         for new_id in range(len(self.vocab), vocab_size):
-            pairs = Counter(zip(tokens, tokens[1:])) # Cuenta los pares de tokens más comunes
-            best = pairs.most_common(1)[0][0] # Pareja más común
+            pairs = Counter(
+                zip(tokens, tokens[1:])
+            )  # Cuenta los pares de tokens más comunes
+            best = pairs.most_common(1)[0][0]  # Pareja más común
 
             # El nuevo token es la concatenación de los tokens de la pareja más común
             new_tok = self.vocab[best[0]] + self.vocab[best[1]]
 
             self.tok2id[new_tok] = new_id
             self.vocab.append(new_tok)
-            self.merges.append((best, new_id)) # ((id_a, id_b), nuevo_id)
+            self.merges.append((best, new_id))  # ((id_a, id_b), nuevo_id)
 
             # Recorre todo el texto y va aplicando el merge
             tokens = self._apply_merge(tokens, best[0], best[1], new_id)
@@ -82,6 +91,7 @@ class BPETokenizer():
     def save(self, path):
         """Serializa el vocabulario y los merges a JSON para reutilizarlos sin reentrenar."""
         import json
+
         state = {
             "vocab": self.vocab,
             "vocab_size": self.vocab_size,
@@ -94,6 +104,7 @@ class BPETokenizer():
     def load(cls, path):
         """Carga un tokenizador previamente guardado con save()."""
         import json
+
         state = json.load(open(path, encoding="utf-8"))
         obj = cls.__new__(cls)
         obj.vocab = state["vocab"]
@@ -105,6 +116,7 @@ class BPETokenizer():
     def __repr__(self):
         pretty = [t.replace("\n", "\\n").replace(" ", "▁") for t in self.vocab]
         return f"{len(self.vocab)} tokens: ['{"', '".join(pretty)}']"
+
 
 # Si ejecutamos este módulo directamente, probamos el tokenizador
 if __name__ == "__main__":

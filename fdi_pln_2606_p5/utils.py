@@ -3,12 +3,14 @@
 from pathlib import Path
 from loguru import logger
 
+
 def load_corpus(path="resources"):
     """Carga y concatena todos los ficheros .txt del directorio dado."""
     files = sorted(Path(path).glob("*.txt"))
     if not files:
         raise FileNotFoundError(f"No se encontraron .txt en '{path}'")
     return "\n\n".join(p.read_text(encoding="utf-8") for p in files)
+
 
 def save_losses(train_losses, val_losses, path="logs/loss.txt"):
     """Guarda las pérdidas de entrenamiento y validación en un fichero de texto."""

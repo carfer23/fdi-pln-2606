@@ -17,7 +17,9 @@ url = "https://download.pytorch.org/whl/cu121"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu121" }
+torch = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'linux'" },
+]
 
 [project.scripts]
 transformer = "main:cli"

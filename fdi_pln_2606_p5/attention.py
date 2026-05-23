@@ -6,7 +6,8 @@ import torch.nn.functional as F
 
 import math
 
-class Attention(nn.Module): # Un módulo de PyTorch es un modelo entrenable
+
+class Attention(nn.Module):  # Un módulo de PyTorch es un modelo entrenable
     """Auto-atención multi-cabezal con escala (scaled multi-head self-attention)
 
     Si `causal=True` en el forward, cada posición solo atiende a las
@@ -16,11 +17,11 @@ class Attention(nn.Module): # Un módulo de PyTorch es un modelo entrenable
     dropout es el porcentaje de dropout a usar.
     """
 
-    def __init__(self, d_model, n_heads, max_seq_len, dropout): # Hiperparámetros
+    def __init__(self, d_model, n_heads, max_seq_len, dropout):  # Hiperparámetros
         # Parámetros
         super().__init__()
 
-        self.n_heads = n_heads # Número de cabezas de atención
+        self.n_heads = n_heads  # Número de cabezas de atención
         self.head_dim = d_model // n_heads  # dimensión por cabezal
 
         # Matrices separadas
@@ -38,7 +39,7 @@ class Attention(nn.Module): # Un módulo de PyTorch es un modelo entrenable
         self.out = nn.Linear(d_model, d_model)
 
         # El dropout se activa en train y desactiva en test gracias a pytorch
-        self.dropout = nn.Dropout(dropout) # % de neuronas que se desactivan
+        self.dropout = nn.Dropout(dropout)  # % de neuronas que se desactivan
 
         # La máscara causal pone a -inf las posiciones correspondientes a tokens
         # "futuros" (triangular superior)
@@ -48,7 +49,7 @@ class Attention(nn.Module): # Un módulo de PyTorch es un modelo entrenable
         # Registramos la máscara causal como tensor (no entrenable)
         self.register_buffer("mask", mask)
 
-    def forward(self, x, causal=True): # forward hace el cálculo hacia delante
+    def forward(self, x, causal=True):  # forward hace el cálculo hacia delante
         """
         :param x: tensor de los embeddings. Shape (batch_size, n_tokens, d_model)
         :param causal: si True, se aplica la máscara causal para que cada posición solo atienda a las anteriores.
@@ -72,18 +73,20 @@ class Attention(nn.Module): # Un módulo de PyTorch es un modelo entrenable
         k = self.split_heads(k)
         v = self.split_heads(v)
 
-        a = q @ k.transpose(-2, -1) # (batch_size, n_heads, n_tokens, head_dim) @ (batch_size, n_heads, head_dim, n_tokens) -> (batch_size, n_heads, n_tokens, n_tokens)
+        a = (
+            q @ k.transpose(-2, -1)
+        )  # (batch_size, n_heads, n_tokens, head_dim) @ (batch_size, n_heads, head_dim, n_tokens) -> (batch_size, n_heads, n_tokens, n_tokens)
         # Nota: para escalar, dividir por raíz de head_dim (para que los logits no crezcan sin control)
         a /= math.sqrt(self.head_dim)
 
         if causal:
-            seq_len = x.shape[1] # n_tokens
+            seq_len = x.shape[1]  # n_tokens
             # Al sumar la máscara, las posiciones futuras adquieren valor -inf
             a = a + self.mask[:seq_len, :seq_len]
 
         a = F.softmax(a, dim=-1)
         a = self.dropout(a)
-        z = a @ v # z queda con shape (batch_size, n_heads, n_tokens, head_dim)
+        z = a @ v  # z queda con shape (batch_size, n_heads, n_tokens, head_dim)
 
         # "deshacemos" la partición en cabezales
         # (batch_size, n_heads, n_tokens, head_dim) -> (batch_size, n_tokens, d_model)

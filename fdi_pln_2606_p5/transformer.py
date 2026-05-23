@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from attention import Attention
 
+
 class FeedForward(nn.Module):
     """Capa feedforward del Transformer.
 
@@ -18,44 +19,52 @@ class FeedForward(nn.Module):
     def __init__(self, d_model, expansion, dropout):
         super().__init__()
 
-        # Toma el vector de embedding de un token (d_model), lo expande a un 
+        # Toma el vector de embedding de un token (d_model), lo expande a un
         # espacio 4 veces mayor (4 * d_model) y luego lo vuelve a comprimir a la dimensión original (d_model)
         hidden = expansion * d_model
         self.net = nn.Sequential(
             nn.Linear(d_model, hidden),
-            nn.GELU(), # Función de activación no lineal
+            nn.GELU(),  # Función de activación no lineal
             nn.Linear(hidden, d_model),
-            nn.Dropout(dropout)
+            nn.Dropout(dropout),
         )
-    
+
     def forward(self, x):
         return self.net(x)
 
+
 class Block(nn.Module):
     """Bloque de Transformer con atención y feedforward.
-    
+
     Representa una capa completa ("Transformer Block") del modelo.
     Cada bloque tiene una capa de atención y una capa feedforward, con conexiones residuales y normalización.
 
     Incluye las dos cosas principales:
     1. Mecanismo de atención para atender al contexto, aprender matices y ambiguedades.
     2. Red feed-forward, para aprender a abstraer y generar las entradas de la siguiente capa.
-    
+
     Se incluyen capas de normalización para regularizar el aprendizaje.
     """
 
     def __init__(self, d_model, n_heads, max_seq_len, expansion, dropout):
         super().__init__()
-        self.ln1 = nn.LayerNorm(d_model) # Normalización
-        self.attn = Attention(d_model, n_heads, max_seq_len, dropout) # Capa de atención
-        self.ln2 = nn.LayerNorm(d_model) # Normalización
-        self.ff = FeedForward(d_model, expansion, dropout) # Capa feedforward
+        self.ln1 = nn.LayerNorm(d_model)  # Normalización
+        self.attn = Attention(
+            d_model, n_heads, max_seq_len, dropout
+        )  # Capa de atención
+        self.ln2 = nn.LayerNorm(d_model)  # Normalización
+        self.ff = FeedForward(d_model, expansion, dropout)  # Capa feedforward
 
     def forward(self, x, causal=True):
-        x = x + self.attn(self.ln1(x), causal=causal) # Atención con conexión residual (llama a forward() de Attention)
-        x = x + self.ff(self.ln2(x)) # Feedforward con conexión residual (llama a forward() de FeedForward)
+        x = x + self.attn(
+            self.ln1(x), causal=causal
+        )  # Atención con conexión residual (llama a forward() de Attention)
+        x = x + self.ff(
+            self.ln2(x)
+        )  # Feedforward con conexión residual (llama a forward() de FeedForward)
         return x
-        
+
+
 class Transformer(nn.Module):
     """Backbone del transformer: embeddings, bloques de atención y normalización final.
 
@@ -73,7 +82,9 @@ class Transformer(nn.Module):
       dropout      Tasa de dropout para regularización
     """
 
-    def __init__(self, vocab_size, max_seq_len, d_model, n_heads, n_layers, expansion, dropout):
+    def __init__(
+        self, vocab_size, max_seq_len, d_model, n_heads, n_layers, expansion, dropout
+    ):
         super().__init__()
         self.max_seq_len = max_seq_len
         self.d_model = d_model
@@ -89,7 +100,10 @@ class Transformer(nn.Module):
         # El corazón del transformer es el bloque principal, con atención y
         # feedforward, que repetimos en secuencia varias veces
         self.blocks = nn.ModuleList(
-            [Block(d_model, n_heads, max_seq_len, expansion, dropout) for _ in range(n_layers)]
+            [
+                Block(d_model, n_heads, max_seq_len, expansion, dropout)
+                for _ in range(n_layers)
+            ]
         )
 
         # Normalización final antes de la cabeza de salida
