@@ -1,12 +1,12 @@
-"""Exploración de hiperparámetros NER sobre el corpus de Carroll.
+"""Exploración de hiperparámetros NER sobre el corpus.
 
 Analiza primero el corpus para descubrir sus características reales (desequilibrio
 de clases, expansión BPE, truncamiento), y luego lanza un grid search guiado por
 esos hallazgos. Extrae conclusiones sobre qué funciona y por qué.
 
 Uso:
-  python ner_hypersearch.py
-  python ner_hypersearch.py --data merged_2.json --backbone model_info/p5_causal_2606.pth
+  uv run ner_hypersearch.py
+  uv run ner_hypersearch.py --data merged.json --backbone model_info/p5_causal_2606.pth
 """
 
 import argparse
@@ -33,19 +33,20 @@ from ner import ID2LABEL, NUM_LABELS, NERLLM, align_to_bpe
 from ner_train import _compute_class_weights, _make_dataloaders, load_ner_from_merged
 from tokenizer import BPETokenizer
 from utils import load_corpus
+from defaults import DEFAULTS
 
 console = Console()
 
 # ── Arquitectura base (misma que main.py) ────────────────────────────────────
 
 BASE_ARCH = {
-    "vocab_size": 300,
-    "d_model": 128,
-    "n_heads": 4,
-    "n_layers": 3,
-    "seq_len": 128,
-    "expansion": 4,
-    "dropout": 0.1,
+    "vocab_size": DEFAULTS["vocab_size"],
+    "d_model": DEFAULTS["d_model"],
+    "n_heads": DEFAULTS["n_heads"],
+    "n_layers": DEFAULTS["n_layers"],
+    "seq_len": DEFAULTS["seq_len"],
+    "expansion": DEFAULTS["expansion"],
+    "dropout": DEFAULTS["dropout"],
 }
 
 # ── Grid de hiperparámetros a explorar ───────────────────────────────────────
@@ -292,7 +293,7 @@ def print_insights(
 ) -> None:
     insights = []
 
-    # ① Efecto del learning rate
+    # Efecto del learning rate
     by_lr: dict = {}
     for r in results_sorted:
         lr = r["config"]["lr"]
@@ -301,14 +302,14 @@ def print_insights(
     best_lr = max(avg_by_lr, key=avg_by_lr.get)
     worst_lr = min(avg_by_lr, key=avg_by_lr.get)
     insights.append(
-        f"① [bold]Sensibilidad al LR:[/bold] el mejor LR es {best_lr:.0e} "
+        f"[bold]Sensibilidad al LR:[/bold] el mejor LR es {best_lr:.0e} "
         f"(F1 medio={avg_by_lr[best_lr]:.3f}), el peor {worst_lr:.0e} "
         f"(F1={avg_by_lr[worst_lr]:.3f}). Con solo {corpus_stats['n_train']} frases "
         "de entrenamiento, un LR demasiado alto produce oscilaciones en la pérdida "
         "antes de converger; demasiado bajo no converge en 20 épocas."
     )
 
-    # ② Efecto de congelar el backbone
+    # Efecto de congelar el backbone
     if has_backbone:
         f1_freeze = [
             r["metrics"]["best_val_f1"]
@@ -326,7 +327,7 @@ def print_insights(
             delta = abs(avg_freeze - avg_full)
             if avg_freeze > avg_full:
                 insights.append(
-                    f"② [bold]Freeze backbone:[/bold] congelar el backbone es mejor "
+                    f"[bold]Freeze backbone:[/bold] congelar el backbone es mejor "
                     f"(Δ F1 = +{delta:.3f}). Con {corpus_stats['n_train']} frases, "
                     "el fine-tuning completo produce olvido catastrófico: los gradientes "
                     "de la pequeña cabeza NER corrompem las representaciones preentrenadas "
@@ -335,13 +336,13 @@ def print_insights(
                 )
             else:
                 insights.append(
-                    f"② [bold]Freeze backbone:[/bold] fine-tuning completo es mejor "
+                    f"[bold]Freeze backbone:[/bold] fine-tuning completo es mejor "
                     f"(Δ F1 = +{delta:.3f}). El backbone necesita adaptarse al esquema BIO: "
                     "las representaciones preentrenadas con objetivo causal (predecir siguiente "
                     "token) no son óptimas para clasificación bidireccional por token."
                 )
 
-    # ③ Tamaño de batch
+    # Tamaño de batch
     by_batch: dict = {}
     for r in results_sorted:
         b = r["config"]["batch_size"]
@@ -349,7 +350,7 @@ def print_insights(
     avg_by_batch = {b: sum(v) / len(v) for b, v in by_batch.items()}
     best_batch = max(avg_by_batch, key=avg_by_batch.get)
     insights.append(
-        f"③ [bold]Tamaño de batch:[/bold] batch={best_batch} tiene el mejor F1 medio "
+        f"[bold]Tamaño de batch:[/bold] batch={best_batch} tiene el mejor F1 medio "
         f"({avg_by_batch[best_batch]:.3f}). Con {corpus_stats['n_train']} frases, "
         f"batch=4 da ~{corpus_stats['n_train'] // 4} actualizaciones/época "
         f"y batch=8 da ~{corpus_stats['n_train'] // 8}. "
@@ -357,10 +358,10 @@ def print_insights(
         "a escapar de mínimos locales o perjudicar la convergencia en datasets tan pequeños."
     )
 
-    # ④ Overfitting
+    # Overfitting
     overfit_count = sum(1 for r in results_sorted if r["metrics"]["overfit"])
     insights.append(
-        f"④ [bold]Overfitting:[/bold] {overfit_count}/{len(results_sorted)} configuraciones "
+        f"[bold]Overfitting:[/bold] {overfit_count}/{len(results_sorted)} configuraciones "
         f"muestran aumento de val_loss en la segunda mitad del entrenamiento. "
         f"Con solo {corpus_stats['n_val']} frases de validación y "
         f"{corpus_stats['avg_entity_density'] * 100:.2f}% de densidad de entidades, "
@@ -368,9 +369,9 @@ def print_insights(
         "El mejor epoch raramente es el último."
     )
 
-    # ⑤ Desequilibrio de clases
+    # Desequilibrio de clases
     insights.append(
-        f"⑤ [bold]Desequilibrio de clases:[/bold] {corpus_stats['o_ratio'] * 100:.0f}% 'O'. "
+        f"[bold]Desequilibrio de clases:[/bold] {corpus_stats['o_ratio'] * 100:.0f}% 'O'. "
         "Los class_weights asignados compensan esto penalizando más los errores en "
         "entidades raras ('li'/'lc' con <0.5% de tokens). Sin ellos, el modelo "
         "maximizaría el accuracy prediciendo todo como 'O' y obtendría una pérdida "
@@ -378,10 +379,10 @@ def print_insights(
         "contribuye ~200× más que la de 'O'."
     )
 
-    # ⑥ Truncamiento BPE
+    # Truncamiento BPE
     if corpus_stats["truncated"] > 0:
         insights.append(
-            f"⑥ [bold]Truncamiento por BPE:[/bold] {corpus_stats['truncated']} frases "
+            f"[bold]Truncamiento por BPE:[/bold] {corpus_stats['truncated']} frases "
             f"({corpus_stats['truncated'] / corpus_stats['n_sentences'] * 100:.0f}%) "
             f"se truncan al pasar de palabras a sub-tokens (expansión ×{corpus_stats['bpe_expansion']:.1f}). "
             f"La frase más larga del corpus tiene {corpus_stats['max_bpe']} sub-tokens; "
@@ -390,7 +391,7 @@ def print_insights(
         )
     else:
         insights.append(
-            f"⑥ [bold]BPE:[/bold] Factor de expansión ×{corpus_stats['bpe_expansion']:.1f}. "
+            f"[bold]BPE:[/bold] Factor de expansión ×{corpus_stats['bpe_expansion']:.1f}. "
             f"Todas las frases caben en seq_len={BASE_ARCH['seq_len']} tras la tokenización."
         )
 
@@ -424,7 +425,7 @@ def _load_backbone(path: str, device: str):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Exploración de hiperparámetros NER")
-    parser.add_argument("--data", default="merged_2.json")
+    parser.add_argument("--data", default="labels/ner_labels.json")
     parser.add_argument("--backbone", default="model_info/p5_causal_2606.pth")
     parser.add_argument("--corpus", default="resources")
     parser.add_argument("--out", default="logs/hypersearch_results.json")

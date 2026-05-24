@@ -1,130 +1,14 @@
-# P5 — Transformer LLM + NER (Lewis Carroll)
-
-Transformer causal pre-entrenado sobre el corpus de Lewis Carroll (*Alice in Wonderland* + *Through the Looking-Glass*) con una cabeza NER para detectar personas y lugares.
+# P5 - Transformer LLM + NER
 
 ## Integrantes
+- Carmen Fernández González
+- Yushan Yang Xu
 
-| Nombre | Usuario |
-|--------|---------|
-|        |         |
+## Descripción
 
----
+En esta práctica se implementa un Transformer causal pre-entrenado sobre el corpus de *Alice in Wonderland* + *Through the Looking-Glass* con un cabezal NER para detección de entidades, concretamente personas y lugares.
 
-## Requisitos
-
-- Python ≥ 3.12
-- [uv](https://docs.astral.sh/uv/) — gestor de entornos y dependencias
-
-## Instalación
-
-```bash
-uv sync
-```
-
-Esto crea el entorno virtual `.venv/` e instala todas las dependencias declaradas en `pyproject.toml` (torch, click, loguru, rich).
-
----
-
-## Reproducción completa desde cero
-
-Los pesos (`.pth`) **no están en el repositorio**. Para reproducir el experimento completo:
-
-### 1. Entrenar el LLM causal
-
-```bash
-uv run fdi-pln-2606-p5 train-llm --corpus resources --weights-dir model_info
-```
-
-Parámetros principales (con sus valores por defecto):
-
-| Opción | Default | Descripción |
-|--------|---------|-------------|
-| `--corpus` | `resources` | Directorio con los ficheros `.txt` del corpus |
-| `--weights-dir` | `model_info` | Directorio donde se guardan pesos, tokenizador y config |
-| `--epochs` | `4` | Épocas de entrenamiento |
-| `--lr` | `3e-4` | Tasa de aprendizaje |
-| `--batch-size` | `40` | Tamaño de batch |
-| `--d-model` | `128` | Dimensión del modelo |
-| `--n-layers` | `3` | Número de bloques Transformer |
-| `--n-heads` | `4` | Cabezas de atención |
-| `--vocab-size` | `300` | Tamaño del vocabulario BPE |
-| `--seq-len` | `128` | Longitud máxima de secuencia |
-
-Genera en `--weights-dir`: `model.pth`, `tokenizer.json`, `config.json`.
-
-### 2. Fine-tune del NER
-
-```bash
-uv run fdi-pln-2606-p5 train-ner --data merged_2.json --weights-dir model_info
-```
-
-| Opción | Default | Descripción |
-|--------|---------|-------------|
-| `--data` | `merged_2.json` | Fichero JSON con el corpus etiquetado en BIO |
-| `--weights-dir` | `model_info` | Mismo directorio que el LLM (carga backbone) |
-| `--epochs` | `20` | Épocas de fine-tuning |
-| `--lr` | `1e-3` | Tasa de aprendizaje (mejor config. según hypersearch) |
-| `--batch-size` | `4` | Tamaño de batch |
-| `--freeze-backbone` | `False` | Congelar pesos del backbone durante el fine-tuning |
-
-Genera en `--weights-dir`: `ner_model.pth`.
-
----
-
-## Uso con pesos ya entrenados
-
-Si se dispone de los ficheros de pesos, colocarlos en un directorio (p. ej. `model_info/`) con esta estructura:
-
-```
-model_info/
-  config.json          # arquitectura e hiperparámetros del backbone
-  tokenizer.json       # vocabulario BPE (vocab_size=300)
-  model.pth            # pesos del LLM causal  (o p5_causal_2606.pth)
-  ner_model.pth        # pesos del modelo NER
-```
-
-### Generar texto
-
-```bash
-uv run fdi-pln-2606-p5 generate "alice looked at the"
-uv run fdi-pln-2606-p5 generate "the queen said" --temperature 0.4 --max-tokens 100
-```
-
-Pasar el `.pth` directamente (sin depender de la estructura de directorio):
-
-```bash
-uv run fdi-pln-2606-p5 generate "alice" \
-    --weights-dir model_info \
-    --llm-path /ruta/al/model.pth
-```
-
-### Extraer entidades nombradas
-
-```bash
-uv run fdi-pln-2606-p5 entities texto.txt
-```
-
-Pasar el `.pth` directamente:
-
-```bash
-uv run fdi-pln-2606-p5 entities texto.txt \
-    --weights-dir model_info \
-    --ner-path /ruta/al/ner_model.pth
-```
-
----
-
-## Exploración de hiperparámetros
-
-```bash
-uv run python ner_hypersearch.py
-```
-
-Grid search de 12 configuraciones (`lr` × `freeze_backbone` × `batch_size`) con análisis previo del corpus. Resultados en `logs/hypersearch_results.json`.
-
----
-
-## Estructura del proyecto
+## Resumen de ficheros
 
 | Fichero | Descripción |
 |---------|-------------|
@@ -136,9 +20,64 @@ Grid search de 12 configuraciones (`lr` × `freeze_backbone` × `batch_size`) co
 | `ner_train.py` | Fine-tuning NER con `class_weights` por desequilibrio |
 | `ner_hypersearch.py` | Grid search de hiperparámetros NER |
 | `tokenizer.py` | Tokenizador BPE entrenado sobre el corpus |
-| `utils.py` | `load_corpus`, utilidades de ficheros |
+| `utils.py` | Funciones auxiliares |
+| `defaults.py` | Hiperparámetros por defecto |
 | `main.py` | CLI unificado (4 comandos) |
-| `fdi_pln_2606_p5/cli.py` | Entry point del paquete instalable |
-| `merged_2.json` | Corpus etiquetado en esquema BIO (dato de entrenamiento) |
-| `resources/` | Corpus de texto plano (Carroll) |
-| `informe_2606.html` | Informe de exploración de hiperparámetros |
+
+## Configuración por defecto
+
+- Corpus (texto para tokenizador / LLM): carpeta `resources/`
+- Etiquetas NER: `labels/ner_labels.json`
+- Pesos LLM por defecto: `model_info/p5_causal_2606.pth`
+- Salida tokenizador/config: `model_info/tokenizer.json`, `model_info/config.json`
+- Pesos NER salida: `model_info/p5_ner_2606.pth`
+- Logs: `logs/`
+
+## Uso
+
+El wheel se encuentra disponible en la *release* del repositorio. Instalar el wheel con el siguiente comando:
+```
+uv tool install <ruta al wheel>
+```
+
+El programa ofrece los siguientes comandos:
+```
+Commands:
+  entities   Encuentra entidades nombradas (personas y lugares) en FILE.
+  generate   Genera texto a partir de PROMPT usando el LLM entrenado.
+  train-llm  Pre-entrena el LLM causal sobre el corpus de texto.
+  train-ner  Fine-tune del cabezal NER sobre el corpus etiquetado.
+```
+
+Para obtener información detallada del uso de cada uno, ver el argumento `--help` de cada uno.
+
+**Comandos principales y uso básico**
+- train-llm — preentrena LLM y guarda artefactos:
+  - Requiere: corpus de texto (`--corpus`, por defecto `resources/`).
+  - Produce: `model_info/p5_causal_2606.pth`, `model_info/tokenizer.json`, `model_info/config.json`.
+  - Ejemplo:
+    ```bash
+    fdi-pln-2606-p5 train-llm --corpus resources
+    ```
+- train-ner — fine-tuning de la cabeza NER sobre un backbone:
+  - Requiere: fichero labels (`--labels`), fichero .pth del backbone (`--weights-path`, por defecto `model_info/p5_causal_2606.pth`), corpus para tokenizador (`--corpus`).
+  - Opciones clave: `--freeze-backbone` (por defecto en main.py es False — pasar explícitamente si quieres congelarlo).  
+  - Produce: `model_info/p5_ner_2606.pth`.
+  - Ejemplo:
+    ```bash
+    fdi-pln-2606-p5 train-ner --labels labels/ner_labels.json --weights-path model_info/p5_causal_2606.pth --freeze-backbone
+    ```
+- generate — genera texto con el LLM:
+  - Requiere: `.pth` del LLM (`--llm-path`) y corpus para entrenar tokenizador en tiempo de ejecución (`--corpus`) o `--config-path` para cargar hiperparámetros.  
+  - Si no pasa `--config-path`, usa DEFAULTS (central).  
+  - Ejemplo:
+    ```bash
+    fdi-pln-2606-p5 generate "alice opened the door" --llm-path model_info/p5_causal_2606.pth --corpus resources
+    ```
+- entities — extrae entidades usando modelo NER:
+  - Requiere: `--ner-path` (por defecto `model_info/p5_ner_2606.pth`) y `--corpus` para construir tokenizer.  
+  - Opciones: `--config-path` (opcional) y `--chunk-words`.  
+  - Ejemplo:
+    ```bash
+    fdi-pln-2606-p5 entities path/to/text.txt --ner-path model_info/p5_ner_2606.pth --corpus resources
+    ```

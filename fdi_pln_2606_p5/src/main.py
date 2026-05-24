@@ -1,12 +1,10 @@
-#!/usr/bin/env python3
 """CLI del Transformer LLM + NER sobre el corpus de Lewis Carroll.
 
 Uso:
-  python main.py train-llm            # Entrena el LLM causal
-  python main.py train-ner            # Fine-tune cabezal NER
-  python main.py generate "alice..."  # Genera texto a partir de un prompt
-  python main.py entities texto.txt   # Encuentra entidades en un fichero
-
+  uv run main.py train-llm            # Entrena el LLM causal
+  uv run main.py train-ner            # Fine-tune cabezal NER
+  uv run main.py generate "alice..."  # Genera texto a partir de un prompt
+  uv run main.py entities texto.txt   # Encuentra entidades en un fichero
 """
 
 import json
@@ -26,33 +24,11 @@ from utils import load_corpus
 from tokenizer import BPETokenizer
 from causal_llm import CausalLLM
 from causal_train import train as train_llm_fn
+from defaults import DEFAULTS
 from ner import NERLLM, NUM_LABELS
 from ner_train import load_ner_from_merged, train_ner
 
 console = Console()
-
-# ---------------------------------------------------------------------------
-# Hiperparámetros por defecto
-# ---------------------------------------------------------------------------
-DEFAULTS = {
-    # Arquitectura del backbone compartido
-    "d_model": 128,  # Dimensión de embeddings y representaciones internas
-    "n_heads": 4,  # Cabezales de atención; head_dim = d_model / n_heads = 32
-    "n_layers": 4,  # Bloques transformer apilados
-    "seq_len": 128,  # Longitud máxima de contexto / secuencia
-    "expansion": 4,  # Factor de expansión de la capa feed-forward (hidden = 512)
-    "dropout": 0.1,  # Regularización; desactivado automáticamente en eval()
-    "vocab_size": 300,  # Tokens BPE; suficiente para el vocabulario de
-    # Entrenamiento LLM
-    "epochs": 5,
-    "batch_size": 32,
-    "lr": 3e-4,
-    # Fine-tuning NER
-    "ner_epochs": 15,
-    "ner_lr": 1e-4,  # LR más bajo para preservar representaciones pre-entrenadas
-    "ner_batch": 8,
-}
-
 
 # ---------------------------------------------------------------------------
 # Utilidades
@@ -68,24 +44,30 @@ def _device() -> str:
     return "cpu"
 
 
-def _load_tokenizer(weights_dir: str) -> BPETokenizer:
-    """Carga el tokenizador guardado; lanza error descriptivo si no existe."""
-    path = Path(weights_dir) / "tokenizer.json"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Tokenizador no encontrado en '{path}'.\n"
-            "Ejecuta primero: python main.py train-llm"
-        )
-    return BPETokenizer.load(path)
+def _build_tokenizer(corpus: str, vocab_size: int) -> BPETokenizer:
+    """Entrena siempre un tokenizador BPE nuevo a partir del corpus."""
+    text = load_corpus(corpus)
+    return BPETokenizer(text, vocab_size=vocab_size)
 
 
-def _load_config(weights_dir: str) -> dict:
-    """Carga la configuración del modelo; usa DEFAULTS si no existe."""
-    path = Path(weights_dir) / "config.json"
-    if path.exists():
-        return json.load(open(path))
-    logger.warning("config.json no encontrado, usando hiperparámetros por defecto")
-    return DEFAULTS.copy()
+def _build_config(
+    d_model: int,
+    n_heads: int,
+    n_layers: int,
+    seq_len: int,
+    expansion: int,
+    dropout: float,
+    vocab_size: int,
+) -> dict:
+    return {
+        "d_model": d_model,
+        "n_heads": n_heads,
+        "n_layers": n_layers,
+        "seq_len": seq_len,
+        "expansion": expansion,
+        "dropout": dropout,
+        "vocab_size": vocab_size,
+    }
 
 
 def _build_ner_model(cfg: dict, device: str) -> NERLLM:
@@ -113,7 +95,7 @@ def _chunk_words(words: list[str], max_words: int = 40) -> list[list[str]]:
 
 @click.group()
 def cli():
-    """Transformer LLM + NER: genera texto e identifica entidades en Carroll."""
+    """Transformer LLM + NER: genera texto e identifica entidades en el corpus de Alice In Wonderland."""
 
 
 # ── train-llm ───────────────────────────────────────────────────────────────
@@ -163,7 +145,10 @@ def cli():
     help="Factor expansión FFN",
 )
 @click.option(
-    "--dropout", default=DEFAULTS["dropout"], show_default=True, help="Tasa de dropout"
+    "--dropout",
+    default=DEFAULTS["dropout"],
+    show_default=True,
+    help="Tasa de dropout",
 )
 @click.option(
     "--epochs",
@@ -178,10 +163,13 @@ def cli():
     help="Tamaño de batch",
 )
 @click.option(
-    "--lr", default=DEFAULTS["lr"], show_default=True, help="Learning rate AdamW"
+    "--lr",
+    default=DEFAULTS["lr"],
+    show_default=True,
+    help="Learning rate AdamW",
 )
 @click.option(
-    "--weights-dir",
+    "--model-dir",
     default="model_info",
     show_default=True,
     help="Directorio de salida",
@@ -198,12 +186,12 @@ def train_llm_cmd(
     epochs,
     batch_size,
     lr,
-    weights_dir,
+    model_dir,
 ):
-    """Entrena el LLM causal sobre el corpus de texto.
+    """Pre-entrena el LLM causal sobre el corpus de texto.
 
-    El tokenizador BPE y los pesos se guardan en --weights-dir junto con
-    un config.json que documenta los hiperparámetros usados.
+    El tokenizador BPE y los pesos se guardan en --model-dir junto con
+    un config.json que documenta los hiperparámetros utilizados.
     """
     device = _device()
     logger.info(f"Dispositivo: {device}")
@@ -238,9 +226,9 @@ def train_llm_cmd(
     )
 
     # Persistir pesos, tokenizador y config
-    Path(weights_dir).mkdir(exist_ok=True)
-    torch.save(model.state_dict(), Path(weights_dir) / "model.pth")
-    tokenizer.save(Path(weights_dir) / "tokenizer.json")
+    Path(model_dir).mkdir(exist_ok=True)
+    torch.save(model.state_dict(), Path(model_dir) / "p5_causal_2606.pth")
+    tokenizer.save(Path(model_dir) / "tokenizer.json")
     config = {
         "d_model": d_model,
         "n_heads": n_heads,
@@ -250,8 +238,8 @@ def train_llm_cmd(
         "expansion": expansion,
         "dropout": dropout,
     }
-    json.dump(config, open(Path(weights_dir) / "config.json", "w"), indent=2)
-    logger.info(f"Modelo guardado en '{weights_dir}/'")
+    json.dump(config, open(Path(model_dir) / "config.json", "w"), indent=2)
+    logger.info(f"Modelo guardado en '{model_dir}/'")
 
 
 # ── train-ner ───────────────────────────────────────────────────────────────
@@ -259,60 +247,143 @@ def train_llm_cmd(
 
 @cli.command("train-ner")
 @click.option(
-    "--data",
-    default="merged.json",
+    "--labels",
+    default="labels/ner_labels.json",
     show_default=True,
-    help="Fichero merged.json etiquetado",
+    help="Fichero con las etiquetas NER",
 )
 @click.option(
-    "--weights-dir",
-    default="model_info",
+    "--epochs",
+    default=DEFAULTS["ner_epochs"],
     show_default=True,
-    help="Directorio con pesos LLM y tokenizador",
+    help="Épocas de entrenamiento del NER",
 )
-@click.option("--epochs", default=DEFAULTS["ner_epochs"], show_default=True)
 @click.option(
     "--lr",
     default=DEFAULTS["ner_lr"],
     show_default=True,
-    help="LR (recomendado < lr_LLM)",
+    help="Learning Rate",
 )
-@click.option("--batch-size", default=DEFAULTS["ner_batch"], show_default=True)
 @click.option(
-    "--freeze-backbone/--no-freeze-backbone",
+    "--batch-size",
+    default=DEFAULTS["ner_batch"],
+    show_default=True,
+    help="Tamaño de batch para el entrenamiento del NER",
+)
+@click.option(
+    "--freeze-backbone",
     default=False,
+    show_default=True,
     help="Congela el backbone y entrena solo la cabeza NER",
 )
-def train_ner_cmd(data, weights_dir, epochs, lr, batch_size, freeze_backbone):
+@click.option(
+    "--weights-path",
+    default="model_info/p5_causal_2606.pth",
+    show_default=True,
+    help="Ruta directa al .pth del LLM preentrenado",
+)
+@click.option(
+    "--corpus",
+    default="resources",
+    show_default=True,
+    help="Directorio con ficheros .txt",
+)
+@click.option(
+    "--d-model",
+    default=DEFAULTS["d_model"],
+    show_default=True,
+    help="Dimensión de embeddings",
+)
+@click.option(
+    "--n-heads",
+    default=DEFAULTS["n_heads"],
+    show_default=True,
+    help="Cabezales de atención",
+)
+@click.option(
+    "--n-layers",
+    default=DEFAULTS["n_layers"],
+    show_default=True,
+    help="Capas del transformer",
+)
+@click.option(
+    "--seq-len",
+    default=DEFAULTS["seq_len"],
+    show_default=True,
+    help="Longitud de contexto",
+)
+@click.option(
+    "--vocab-size",
+    default=DEFAULTS["vocab_size"],
+    show_default=True,
+    help="Tamaño del vocabulario BPE",
+)
+@click.option(
+    "--expansion",
+    default=DEFAULTS["expansion"],
+    show_default=True,
+    help="Factor expansión FFN",
+)
+@click.option(
+    "--dropout",
+    default=DEFAULTS["dropout"],
+    show_default=True,
+    help="Tasa de dropout",
+)
+@click.option(
+    "--model-dir",
+    default="model_info",
+    show_default=True,
+    help="Directorio de salida",
+)
+def train_ner_cmd(
+    labels,
+    epochs,
+    lr,
+    batch_size,
+    freeze_backbone,
+    weights_path,
+    corpus,
+    d_model,
+    n_heads,
+    n_layers,
+    seq_len,
+    vocab_size,
+    expansion,
+    dropout,
+    model_dir,
+):
     """Fine-tune del cabezal NER sobre el corpus etiquetado (merged.json).
 
     Carga el backbone pre-entrenado del LLM y le añade/entrena una cabeza
     de clasificación por token para las etiquetas o/pi/pc/li/lc.
     """
     device = _device()
-    tokenizer = _load_tokenizer(weights_dir)
-    cfg = _load_config(weights_dir)
+    tokenizer = _build_tokenizer(corpus, vocab_size)
+    cfg = _build_config(
+        d_model=d_model,
+        n_heads=n_heads,
+        n_layers=n_layers,
+        seq_len=seq_len,
+        expansion=expansion,
+        dropout=dropout,
+        vocab_size=tokenizer.vocab_size,
+    )
 
     model = _build_ner_model(cfg, device)
 
-    # Busca el backbone por los dos nombres posibles
-    for candidate in ("p5_causal_2606.pth", "model.pth"):
-        llm_path = Path(weights_dir) / candidate
-        if llm_path.exists():
-            break
-    if llm_path.exists():
-        state = torch.load(llm_path, map_location=device, weights_only=True)
+    _weights_path = Path(weights_path)
+    if _weights_path.exists():
+        state = torch.load(_weights_path, map_location=device, weights_only=True)
         missing, unexpected = model.load_state_dict(state, strict=False)
         logger.info(
-            f"Backbone cargado de '{llm_path}' | missing={len(missing)} | unexpected={len(unexpected)}"
+            f"Backbone cargado de '{_weights_path}' | missing={len(missing)} | unexpected={len(unexpected)}"
         )
     else:
-        logger.warning(
-            f"No se encontró backbone en '{weights_dir}'; entrenando NER desde cero"
-        )
+        raise FileNotFoundError(f"Backbone no encontrado en '{_weights_path}'.")
 
-    ner_data = load_ner_from_merged(data)
-    logger.info(f"Datos NER cargados: {len(ner_data)} frases de '{data}'")
+    ner_data = load_ner_from_merged(labels)
+    logger.info(f"Datos NER cargados: {len(ner_data)} frases de '{labels}'")
 
     train_ner(
         model,
@@ -324,7 +395,7 @@ def train_ner_cmd(data, weights_dir, epochs, lr, batch_size, freeze_backbone):
         freeze_backbone=freeze_backbone,
     )
 
-    out_path = Path(weights_dir) / "ner_model.pth"
+    out_path = Path(model_dir) / "p5_ner_2606.pth"
     torch.save(model.state_dict(), out_path)
     logger.info(f"Pesos NER guardados en '{out_path}'")
 
@@ -334,27 +405,52 @@ def train_ner_cmd(data, weights_dir, epochs, lr, batch_size, freeze_backbone):
 
 @cli.command("generate")
 @click.argument("prompt")
-@click.option("--max-tokens", default=200, show_default=True, help="Tokens a generar")
+@click.option("--max-tokens", default=20, show_default=True, help="Tokens a generar")
 @click.option(
     "--temperature",
     default=0.8,
     show_default=True,
     help="Temperatura de muestreo (0.1=determinista, 1.5=creativo)",
 )
-@click.option("--weights-dir", default="model_info", show_default=True)
 @click.option(
     "--llm-path",
-    default=None,
-    help="Ruta directa al fichero .pth del LLM (sobreescribe --weights-dir para los pesos)",
+    default="model_info/p5_causal_2606.pth",
+    show_default=True,
+    help="Ruta directa al fichero .pth del LLM",
 )
-def generate_cmd(prompt, max_tokens, temperature, weights_dir, llm_path):
+@click.option(
+    "--config-path",
+    default=None,
+    help="Ruta opcional a config.json con hiperparámetros del modelo)",
+)
+@click.option(
+    "--corpus",
+    default="resources",
+    show_default=True,
+    help="Directorio con ficheros .txt",
+)
+def generate_cmd(
+    prompt,
+    max_tokens,
+    temperature,
+    llm_path,
+    config_path,
+    corpus,
+):
     """Genera texto a partir de PROMPT usando el LLM entrenado."""
     device = _device()
-    tokenizer = _load_tokenizer(weights_dir)
-    cfg = _load_config(weights_dir)
+    if config_path:
+        _config_path = Path(config_path)
+        if not _config_path.exists():
+            raise FileNotFoundError(f"Config no encontrada en '{_config_path}'.")
+        cfg = json.load(open(_config_path))
+    else:
+        cfg = DEFAULTS
+
+    tokenizer = _build_tokenizer(corpus, cfg.get("vocab_size", DEFAULTS["vocab_size"]))
 
     model = CausalLLM(
-        vocab_size=cfg.get("vocab_size", DEFAULTS["vocab_size"]),
+        vocab_size=tokenizer.vocab_size,
         max_seq_len=cfg.get("seq_len", DEFAULTS["seq_len"]),
         d_model=cfg.get("d_model", DEFAULTS["d_model"]),
         n_heads=cfg.get("n_heads", DEFAULTS["n_heads"]),
@@ -363,18 +459,9 @@ def generate_cmd(prompt, max_tokens, temperature, weights_dir, llm_path):
         dropout=0.0,
     ).to(device)
 
-    if llm_path:
-        _llm_path = Path(llm_path)
-    else:
-        for _candidate in ("model.pth", "p5_causal_2606.pth"):
-            _llm_path = Path(weights_dir) / _candidate
-            if _llm_path.exists():
-                break
+    _llm_path = Path(llm_path)
     if not _llm_path.exists():
-        raise FileNotFoundError(
-            f"Pesos LLM no encontrados en '{_llm_path}'.\n"
-            "Ejecuta primero: uv run fdi-pln-2606-p5 train-llm"
-        )
+        raise FileNotFoundError(f"Pesos LLM no encontrados en '{_llm_path}'.")
     weights = torch.load(_llm_path, map_location=device, weights_only=True)
     model.load_state_dict(weights)
 
@@ -398,11 +485,22 @@ def generate_cmd(prompt, max_tokens, temperature, weights_dir, llm_path):
 
 @cli.command("entities")
 @click.argument("file", type=click.Path(exists=True))
-@click.option("--weights-dir", default="model_info", show_default=True)
 @click.option(
     "--ner-path",
+    default="model_info/p5_ner_2606.pth",
+    show_default=True,
+    help="Ruta directa al fichero .pth del NER",
+)
+@click.option(
+    "--config-path",
     default=None,
-    help="Ruta directa al fichero .pth del NER (sobreescribe --weights-dir para los pesos)",
+    help="Ruta opcional a config.json con hiperparámetros del modelo",
+)
+@click.option(
+    "--corpus",
+    default="resources",
+    show_default=True,
+    help="Directorio con ficheros .txt (para construir el tokenizer)",
 )
 @click.option(
     "--chunk-words",
@@ -410,24 +508,43 @@ def generate_cmd(prompt, max_tokens, temperature, weights_dir, llm_path):
     show_default=True,
     help="Palabras por segmento (ajustar si las frases son muy largas)",
 )
-def entities_cmd(file, weights_dir, ner_path, chunk_words):
+def entities_cmd(
+    file,
+    ner_path,
+    config_path,
+    corpus,
+    chunk_words,
+):
     """Encuentra entidades nombradas (personas y lugares) en FILE.
 
     El texto se procesa en segmentos de --chunk-words palabras para respetar
     la longitud máxima de secuencia del modelo.
     """
     device = _device()
-    tokenizer = _load_tokenizer(weights_dir)
-    cfg = _load_config(weights_dir)
+    if config_path:
+        _config_path = Path(config_path)
+        if not _config_path.exists():
+            raise FileNotFoundError(f"Config no encontrada en '{_config_path}'.")
+        cfg = json.load(open(_config_path))
+    else:
+        cfg = DEFAULTS
+
+    tokenizer = _build_tokenizer(corpus, cfg.get("vocab_size", DEFAULTS["vocab_size"]))
+    cfg = _build_config(
+        d_model=cfg.get("d_model", DEFAULTS["d_model"]),
+        n_heads=cfg.get("n_heads", DEFAULTS["n_heads"]),
+        n_layers=cfg.get("n_layers", DEFAULTS["n_layers"]),
+        seq_len=cfg.get("seq_len", DEFAULTS["seq_len"]),
+        expansion=cfg.get("expansion", DEFAULTS["expansion"]),
+        dropout=cfg.get("dropout", DEFAULTS["dropout"]),
+        vocab_size=tokenizer.vocab_size,
+    )
 
     model = _build_ner_model(cfg, device)
 
-    _ner_path = Path(ner_path) if ner_path else Path(weights_dir) / "ner_model.pth"
+    _ner_path = Path(ner_path)
     if not _ner_path.exists():
-        raise FileNotFoundError(
-            f"Pesos NER no encontrados en '{_ner_path}'.\n"
-            "Ejecuta primero: uv run fdi-pln-2606-p5 train-ner"
-        )
+        raise FileNotFoundError(f"Pesos NER no encontrados en '{_ner_path}'.")
     weights = torch.load(_ner_path, map_location=device, weights_only=True)
     model.load_state_dict(weights)
 

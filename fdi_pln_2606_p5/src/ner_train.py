@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 from loguru import logger
 
+from defaults import DEFAULTS
 from ner import NERLLM, NERDataset, collate_ner, NUM_LABELS
 from tokenizer import BPETokenizer
 
@@ -85,17 +86,8 @@ def _run_epoch(model, dataloader, label, optimizer=None, class_weights=None):
 
 
 def _compute_class_weights(train_ds):
-    """Calcula pesos inversamente proporcionales a la frecuencia de cada clase en el dataset."""
-    counts = torch.zeros(NUM_LABELS, dtype=torch.long)
-    for _, labels in train_ds.samples:
-        valid = labels[labels >= 0]
-        if valid.numel() == 0:
-            continue
-        counts += torch.bincount(valid, minlength=NUM_LABELS)
-    counts = counts.clamp_min(1)
-    weights = counts.sum().float() / counts.float()
-    weights = weights / weights.mean()
-    return weights
+    """Devuelve pesos uniformes para todas las clases."""
+    return torch.ones(NUM_LABELS, dtype=torch.float)
 
 
 def train_ner(
@@ -169,27 +161,44 @@ def train_ner(
 
 if __name__ == "__main__":
     import argparse
-    import re
     from utils import load_corpus
 
     parser = argparse.ArgumentParser(
         description="Fine-tuning para NER de un CausalLLM preentrenado"
     )
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=5e-5)  # Menor lr para fine-tuning
-    parser.add_argument("--merged_json", type=str, default="labels/merged.json")
+    parser.add_argument("--epochs", type=int, default=DEFAULTS["ner_epochs"])
+    parser.add_argument("--batch_size", type=int, default=DEFAULTS["ner_batch"])
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=DEFAULTS["ner_lr"],
+    )
+    parser.add_argument("--merged_json", type=str, default="labels/ner_labels.json")
     parser.add_argument(
         "--model_path", type=str, default="model_info/p5_causal_2606.pth"
     )
     parser.add_argument("--corpus", type=str, default="resources")
-    parser.add_argument("--d_model", type=int, default=128)
-    parser.add_argument("--n_heads", type=int, default=4)
-    parser.add_argument("--n_layers", type=int, default=3)
-    parser.add_argument("--seq_len", type=int, default=128)
-    parser.add_argument("--expansion", type=int, default=4)
-    parser.add_argument("--dropout", type=float, default=0.1)
-    parser.add_argument("--vocab_size", type=int, default=300)
+    parser.add_argument("--d_model", type=int, default=DEFAULTS["d_model"])
+    parser.add_argument("--n_heads", type=int, default=DEFAULTS["n_heads"])
+    parser.add_argument("--n_layers", type=int, default=DEFAULTS["n_layers"])
+    parser.add_argument("--seq_len", type=int, default=DEFAULTS["seq_len"])
+    parser.add_argument("--expansion", type=int, default=DEFAULTS["expansion"])
+    parser.add_argument("--dropout", type=float, default=DEFAULTS["dropout"])
+    parser.add_argument("--vocab_size", type=int, default=DEFAULTS["vocab_size"])
+    parser.add_argument(
+        "--freeze-backbone",
+        dest="freeze_backbone",
+        action="store_true",
+        default=True,
+        help="Congelar el backbone durante el fine-tuning (por defecto: True)",
+    )
+    parser.add_argument(
+        "--no-freeze-backbone",
+        dest="freeze_backbone",
+        action="store_false",
+        help="No congelar el backbone (hacer fine-tuning completo)",
+    )
+
     args = parser.parse_args()
 
     # Almacenar logs
@@ -254,6 +263,7 @@ if __name__ == "__main__":
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,
+        freeze_backbone=args.freeze_backbone,
     )
 
     # 7. Guardar modelo NER

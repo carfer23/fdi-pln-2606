@@ -1,17 +1,23 @@
-# Virtual environments
 venv/
 .env/
 .venv/
 
-# IDE/editor
 .vscode/
 .idea/
+
+.DS_Store
 
 __pycache__/
 
 fdi_pln_2606_p1/src/*.json
 fdi_pln_2606_p1/*.json
+dist/
 logs/
 
 model_info/
+model_weights/
 labels/
+*.pth
+*.egg-info
+resources/
+pruebas/

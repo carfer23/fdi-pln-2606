@@ -1,11 +1,12 @@
 """Entrenamiento del LLM causal sobre un corpus de textos."""
 
 import time
-from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader, Dataset
 from loguru import logger
+
+from defaults import DEFAULTS
 
 
 class TextDataset(Dataset):
@@ -150,16 +151,16 @@ if __name__ == "__main__":
     # Hiperparámetros por defecto (se pueden modificar desde línea de comandos)
     parser = argparse.ArgumentParser(description="Entrenar un LLM causal pequeño")
     parser.add_argument("--corpus", type=str, default="resources")
-    parser.add_argument("--d_model", type=int, default=128)
-    parser.add_argument("--n_heads", type=int, default=4)
-    parser.add_argument("--n_layers", type=int, default=3)
-    parser.add_argument("--seq_len", type=int, default=128)
-    parser.add_argument("--expansion", type=int, default=4)
-    parser.add_argument("--dropout", type=float, default=0.1)
-    parser.add_argument("--vocab_size", type=int, default=300)
-    parser.add_argument("--epochs", type=int, default=4)
-    parser.add_argument("--batch_size", type=int, default=40)
-    parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--d_model", type=int, default=DEFAULTS["d_model"])
+    parser.add_argument("--n_heads", type=int, default=DEFAULTS["n_heads"])
+    parser.add_argument("--n_layers", type=int, default=DEFAULTS["n_layers"])
+    parser.add_argument("--seq_len", type=int, default=DEFAULTS["seq_len"])
+    parser.add_argument("--expansion", type=int, default=DEFAULTS["expansion"])
+    parser.add_argument("--dropout", type=float, default=DEFAULTS["dropout"])
+    parser.add_argument("--vocab_size", type=int, default=DEFAULTS["vocab_size"])
+    parser.add_argument("--epochs", type=int, default=DEFAULTS["epochs"])
+    parser.add_argument("--batch_size", type=int, default=DEFAULTS["batch_size"])
+    parser.add_argument("--lr", type=float, default=DEFAULTS["lr"])
     args = parser.parse_args()
 
     # Preparar carpetas de salida
