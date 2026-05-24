@@ -1,1 +1,0 @@
-{"d_model": 128, "n_heads": 4, "n_layers": 3, "seq_len": 128, "vocab_size": 300, "expansion": 4, "dropout": 0.1, "epochs": 4, "batch_size": 40, "lr": 0.0003}

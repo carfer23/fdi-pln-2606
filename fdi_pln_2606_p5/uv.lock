@@ -30,7 +30,7 @@ wheels = [
 [[package]]
 name = "fdi-pln-2606-p5"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "loguru" },

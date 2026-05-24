@@ -42,7 +42,7 @@ BASE_ARCH = {
     "vocab_size": 300,
     "d_model": 128,
     "n_heads": 4,
-    "n_layers": 4,
+    "n_layers": 3,
     "seq_len": 128,
     "expansion": 4,
     "dropout": 0.1,
@@ -115,17 +115,21 @@ def print_corpus_analysis(stats: dict) -> None:
     lines = [
         f"[bold]Dataset:[/bold] {stats['n_sentences']} frases  →  "
         f"{stats['n_train']} entrenamiento / {stats['n_val']} validación",
-        f"[bold]Desequilibrio de clases:[/bold] {stats['o_ratio']*100:.1f}% de tokens son 'O'",
+        f"[bold]Desequilibrio de clases:[/bold] {stats['o_ratio'] * 100:.1f}% de tokens son 'O'",
         f"[bold]Expansión BPE:[/bold] {stats['avg_words']:.0f} palabras/frase → "
         f"{stats['avg_bpe']:.0f} sub-tokens/frase  (×{stats['bpe_expansion']:.2f})",
-        f"[bold]Densidad de entidades:[/bold] {stats['avg_entity_density']*100:.2f}% "
+        f"[bold]Densidad de entidades:[/bold] {stats['avg_entity_density'] * 100:.2f}% "
         "tokens por frase son entidad",
         f"[bold]Frases truncadas (>{BASE_ARCH['seq_len']} sub-tokens):[/bold] "
         f"{stats['truncated']}/{stats['n_sentences']}  "
         f"(la más larga tiene {stats['max_bpe']} sub-tokens)",
     ]
     console.print(
-        Panel("\n".join(lines), title="[yellow]Realidades del corpus[/yellow]", border_style="yellow")
+        Panel(
+            "\n".join(lines),
+            title="[yellow]Realidades del corpus[/yellow]",
+            border_style="yellow",
+        )
     )
 
     warns = []
@@ -283,7 +287,9 @@ def run_config(cfg: dict, ner_data: list, tokenizer, device, backbone_state) -> 
 # ── Insights ─────────────────────────────────────────────────────────────────
 
 
-def print_insights(results_sorted: list, corpus_stats: dict, has_backbone: bool) -> None:
+def print_insights(
+    results_sorted: list, corpus_stats: dict, has_backbone: bool
+) -> None:
     insights = []
 
     # ① Efecto del learning rate
@@ -304,8 +310,16 @@ def print_insights(results_sorted: list, corpus_stats: dict, has_backbone: bool)
 
     # ② Efecto de congelar el backbone
     if has_backbone:
-        f1_freeze = [r["metrics"]["best_val_f1"] for r in results_sorted if r["config"]["freeze_backbone"]]
-        f1_full = [r["metrics"]["best_val_f1"] for r in results_sorted if not r["config"]["freeze_backbone"]]
+        f1_freeze = [
+            r["metrics"]["best_val_f1"]
+            for r in results_sorted
+            if r["config"]["freeze_backbone"]
+        ]
+        f1_full = [
+            r["metrics"]["best_val_f1"]
+            for r in results_sorted
+            if not r["config"]["freeze_backbone"]
+        ]
         if f1_freeze and f1_full:
             avg_freeze = sum(f1_freeze) / len(f1_freeze)
             avg_full = sum(f1_full) / len(f1_full)
@@ -337,8 +351,8 @@ def print_insights(results_sorted: list, corpus_stats: dict, has_backbone: bool)
     insights.append(
         f"③ [bold]Tamaño de batch:[/bold] batch={best_batch} tiene el mejor F1 medio "
         f"({avg_by_batch[best_batch]:.3f}). Con {corpus_stats['n_train']} frases, "
-        f"batch=4 da ~{corpus_stats['n_train']//4} actualizaciones/época "
-        f"y batch=8 da ~{corpus_stats['n_train']//8}. "
+        f"batch=4 da ~{corpus_stats['n_train'] // 4} actualizaciones/época "
+        f"y batch=8 da ~{corpus_stats['n_train'] // 8}. "
         "Un batch pequeño introduce más ruido en el gradiente, lo que puede ayudar "
         "a escapar de mínimos locales o perjudicar la convergencia en datasets tan pequeños."
     )
@@ -349,14 +363,14 @@ def print_insights(results_sorted: list, corpus_stats: dict, has_backbone: bool)
         f"④ [bold]Overfitting:[/bold] {overfit_count}/{len(results_sorted)} configuraciones "
         f"muestran aumento de val_loss en la segunda mitad del entrenamiento. "
         f"Con solo {corpus_stats['n_val']} frases de validación y "
-        f"{corpus_stats['avg_entity_density']*100:.2f}% de densidad de entidades, "
+        f"{corpus_stats['avg_entity_density'] * 100:.2f}% de densidad de entidades, "
         "la señal de validación es extremadamente ruidosa (pocas entidades por frase). "
         "El mejor epoch raramente es el último."
     )
 
     # ⑤ Desequilibrio de clases
     insights.append(
-        f"⑤ [bold]Desequilibrio de clases:[/bold] {corpus_stats['o_ratio']*100:.0f}% 'O'. "
+        f"⑤ [bold]Desequilibrio de clases:[/bold] {corpus_stats['o_ratio'] * 100:.0f}% 'O'. "
         "Los class_weights asignados compensan esto penalizando más los errores en "
         "entidades raras ('li'/'lc' con <0.5% de tokens). Sin ellos, el modelo "
         "maximizaría el accuracy prediciendo todo como 'O' y obtendría una pérdida "
@@ -368,7 +382,7 @@ def print_insights(results_sorted: list, corpus_stats: dict, has_backbone: bool)
     if corpus_stats["truncated"] > 0:
         insights.append(
             f"⑥ [bold]Truncamiento por BPE:[/bold] {corpus_stats['truncated']} frases "
-            f"({corpus_stats['truncated']/corpus_stats['n_sentences']*100:.0f}%) "
+            f"({corpus_stats['truncated'] / corpus_stats['n_sentences'] * 100:.0f}%) "
             f"se truncan al pasar de palabras a sub-tokens (expansión ×{corpus_stats['bpe_expansion']:.1f}). "
             f"La frase más larga del corpus tiene {corpus_stats['max_bpe']} sub-tokens; "
             f"el modelo solo ve los primeros {BASE_ARCH['seq_len']}. Las entidades "
@@ -463,9 +477,7 @@ def main() -> None:
     # 5. Grid search
     results = []
     for i, cfg in enumerate(configs, 1):
-        label = (
-            f"lr={cfg['lr']:.0e}  freeze={'T' if cfg['freeze_backbone'] else 'F'}  batch={cfg['batch_size']}"
-        )
+        label = f"lr={cfg['lr']:.0e}  freeze={'T' if cfg['freeze_backbone'] else 'F'}  batch={cfg['batch_size']}"
         console.print(f"  [{i:>2}/{len(configs)}] {label} ...", end=" ")
         metrics = run_config(cfg, ner_data, tokenizer, device, backbone_state)
         results.append({"config": cfg, "metrics": metrics})
@@ -480,7 +492,15 @@ def main() -> None:
     results_sorted = sorted(results, key=lambda r: -r["metrics"]["best_val_f1"])
 
     t = Table(
-        "Rank", "LR", "Freeze", "Batch", "Best F1", "Best Ep.", "Val Loss", "Overfit", "Tiempo",
+        "Rank",
+        "LR",
+        "Freeze",
+        "Batch",
+        "Best F1",
+        "Best Ep.",
+        "Val Loss",
+        "Overfit",
+        "Tiempo",
         box=box.ROUNDED,
         show_lines=True,
     )
@@ -505,7 +525,11 @@ def main() -> None:
     # 8. Guardar
     pathlib.Path(args.out).parent.mkdir(exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"corpus_stats": stats, "grid": GRID, "results": results_sorted}, f, indent=2)
+        json.dump(
+            {"corpus_stats": stats, "grid": GRID, "results": results_sorted},
+            f,
+            indent=2,
+        )
     console.print(f"\n[dim]Resultados guardados en {args.out}[/dim]")
 
 

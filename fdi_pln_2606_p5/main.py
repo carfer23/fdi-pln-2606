@@ -182,7 +182,7 @@ def cli():
 )
 @click.option(
     "--weights-dir",
-    default="model_weights",
+    default="model_info",
     show_default=True,
     help="Directorio de salida",
 )
@@ -266,7 +266,7 @@ def train_llm_cmd(
 )
 @click.option(
     "--weights-dir",
-    default="model_weights",
+    default="model_info",
     show_default=True,
     help="Directorio con pesos LLM y tokenizador",
 )
@@ -341,8 +341,13 @@ def train_ner_cmd(data, weights_dir, epochs, lr, batch_size, freeze_backbone):
     show_default=True,
     help="Temperatura de muestreo (0.1=determinista, 1.5=creativo)",
 )
-@click.option("--weights-dir", default="model_weights", show_default=True)
-def generate_cmd(prompt, max_tokens, temperature, weights_dir):
+@click.option("--weights-dir", default="model_info", show_default=True)
+@click.option(
+    "--llm-path",
+    default=None,
+    help="Ruta directa al fichero .pth del LLM (sobreescribe --weights-dir para los pesos)",
+)
+def generate_cmd(prompt, max_tokens, temperature, weights_dir, llm_path):
     """Genera texto a partir de PROMPT usando el LLM entrenado."""
     device = _device()
     tokenizer = _load_tokenizer(weights_dir)
@@ -355,12 +360,22 @@ def generate_cmd(prompt, max_tokens, temperature, weights_dir):
         n_heads=cfg.get("n_heads", DEFAULTS["n_heads"]),
         n_layers=cfg.get("n_layers", DEFAULTS["n_layers"]),
         expansion=cfg.get("expansion", DEFAULTS["expansion"]),
-        dropout=0.0,  # Sin dropout en inferencia
+        dropout=0.0,
     ).to(device)
 
-    weights = torch.load(
-        Path(weights_dir) / "model.pth", map_location=device, weights_only=True
-    )
+    if llm_path:
+        _llm_path = Path(llm_path)
+    else:
+        for _candidate in ("model.pth", "p5_causal_2606.pth"):
+            _llm_path = Path(weights_dir) / _candidate
+            if _llm_path.exists():
+                break
+    if not _llm_path.exists():
+        raise FileNotFoundError(
+            f"Pesos LLM no encontrados en '{_llm_path}'.\n"
+            "Ejecuta primero: uv run fdi-pln-2606-p5 train-llm"
+        )
+    weights = torch.load(_llm_path, map_location=device, weights_only=True)
     model.load_state_dict(weights)
 
     prompt_ids = tokenizer.encode(prompt.lower())
@@ -383,14 +398,19 @@ def generate_cmd(prompt, max_tokens, temperature, weights_dir):
 
 @cli.command("entities")
 @click.argument("file", type=click.Path(exists=True))
-@click.option("--weights-dir", default="model_weights", show_default=True)
+@click.option("--weights-dir", default="model_info", show_default=True)
+@click.option(
+    "--ner-path",
+    default=None,
+    help="Ruta directa al fichero .pth del NER (sobreescribe --weights-dir para los pesos)",
+)
 @click.option(
     "--chunk-words",
     default=40,
     show_default=True,
     help="Palabras por segmento (ajustar si las frases son muy largas)",
 )
-def entities_cmd(file, weights_dir, chunk_words):
+def entities_cmd(file, weights_dir, ner_path, chunk_words):
     """Encuentra entidades nombradas (personas y lugares) en FILE.
 
     El texto se procesa en segmentos de --chunk-words palabras para respetar
@@ -402,13 +422,13 @@ def entities_cmd(file, weights_dir, chunk_words):
 
     model = _build_ner_model(cfg, device)
 
-    ner_path = Path(weights_dir) / "ner_model.pth"
-    if not ner_path.exists():
+    _ner_path = Path(ner_path) if ner_path else Path(weights_dir) / "ner_model.pth"
+    if not _ner_path.exists():
         raise FileNotFoundError(
-            f"Pesos NER no encontrados en '{ner_path}'.\n"
-            "Ejecuta primero: python main.py train-ner"
+            f"Pesos NER no encontrados en '{_ner_path}'.\n"
+            "Ejecuta primero: uv run fdi-pln-2606-p5 train-ner"
         )
-    weights = torch.load(ner_path, map_location=device, weights_only=True)
+    weights = torch.load(_ner_path, map_location=device, weights_only=True)
     model.load_state_dict(weights)
 
     text = Path(file).read_text(encoding="utf-8")

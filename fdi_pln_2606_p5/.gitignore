@@ -1,11 +1,13 @@
-# Pesos del modelo (binarios — distribuir por separado, no subir al repositorio)
+# Pesos del modelo y artefactos generados (distribuir por separado)
 *.pth
 model_weights/
+model_info/
 
 # Artefactos Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 .venv/
 
 # macOS
